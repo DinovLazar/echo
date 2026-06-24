@@ -39,10 +39,10 @@
 ## App source (`ECHO/`)
 - `ECHO/App/ECHOApp.swift` — `@main` SwiftUI App entry point; hosts `ContentView`
 - `ECHO/App/ContentView.swift` — root view: full-bleed paper background + centered `HelloGridView` (Phase 1.02 hello-grid placeholder)
-- `ECHO/Models/.gitkeep` — reserved: grid, turn engine, echo/replay, collision, win checks (empty)
+- `ECHO/Models/` — reserved: grid, turn engine, echo/replay, collision, win checks. **Not git-tracked while empty** (no `.gitkeep` — it collides in Xcode synchronized groups, see D-012); reappears when its first source file lands (Phase 1.03)
 - `ECHO/Views/HelloGridView.swift` — Phase 1.02 throwaway placeholder: static, non-interactive 5×5 grey square grid (replaced by the real board in Phase 1.03)
-- `ECHO/Audio/.gitkeep` — reserved: generative percussion, Part 2 (empty)
-- `ECHO/Haptics/.gitkeep` — reserved: Core Haptics mapping, Part 2 (empty)
+- `ECHO/Audio/` — reserved: generative percussion, Part 2. **Not git-tracked while empty** (no `.gitkeep`, see D-012); reappears when populated
+- `ECHO/Haptics/` — reserved: Core Haptics mapping, Part 2. **Not git-tracked while empty** (no `.gitkeep`, see D-012); reappears when populated
 - `ECHO/Resources/Assets.xcassets/Contents.json` — asset catalog root
 - `ECHO/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json` — app icon set (no artwork yet)
 - `ECHO/Resources/Assets.xcassets/AccentColor.colorset/Contents.json` — accent color (system default)

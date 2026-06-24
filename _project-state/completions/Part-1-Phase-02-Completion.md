@@ -15,7 +15,7 @@
 - ⚠️ **The app runs in the Simulator and renders correctly; a Simulator screenshot is included or referenced.** — **not run here** (no Simulator). In place of a capture I committed a deterministic layout reference, `_project-state/completions/Part-1-Phase-02-grid-layout-reference.svg`, computed to match the code (iPhone 390×844, safe-area insets, 5×5 at 82%). It is explicitly **not** a Simulator screenshot. **Action required (Lazar's Mac):** ⌘R, confirm the centered grid renders, and capture a real screenshot.
 - ⚠️ **`ECHOTests` still builds and its trivial test still passes.** — **not executed here** (no test runner). The test file is unchanged from 1.01 (`testScaffoldCompilesAndRuns()` → `XCTAssertEqual(2 + 2, 4)`) and this phase added no code it depends on. **Action required (Lazar's Mac):** ⌘U to confirm it still passes.
 - ✅ **"Automatically manage signing" is on for both targets and no Development Team is hardcoded.** — evidence: `CODE_SIGN_STYLE = Automatic` in all four target configs (`ECHO` Debug/Release, `ECHOTests` Debug/Release); a repo-wide search finds **no** `DEVELOPMENT_TEAM` key in `project.pbxproj`. (Already true since 1.01; confirmed unchanged.)
-- ✅ **`Models/`, `Audio/`, `Haptics/` still empty; no level JSON or engine code added.** — evidence: those three folders still contain only `.gitkeep`; `Levels/` still only `.gitkeep`. The only new source file is `ECHO/Views/HelloGridView.swift` (a view). `ECHO/Views/.gitkeep` was removed because the folder now holds a real file.
+- ✅ **`Models/`, `Audio/`, `Haptics/` still empty; no level JSON or engine code added.** — evidence: no code was added to those folders; `Levels/` holds only its `.gitkeep`. The only new source file is `ECHO/Views/HelloGridView.swift` (a view). **Addendum (see §9):** the `.gitkeep` keepers in `ECHO/{Models,Audio,Haptics}` (and the already-removed `ECHO/Views/.gitkeep`) were deleted after this report's first filing because they broke the Xcode build; those three folders are now empty/untracked rather than `.gitkeep`-tracked.
 - ✅ **`current-state.md` and `file-map.md` updated; `00_stack-and-config.md` appended; device install noted as Lazar's pending step.** — evidence: `current-state.md` overwritten to the post-hello-grid snapshot with the verification caveat; `file-map.md` lists `HelloGridView.swift`, the reference SVG, and this report, and drops the removed `Views/.gitkeep`; `00_stack-and-config.md` has a new dated Phase-1.02 entry.
 - ✅ **Changes committed and pushed to `main`.** — see §5 (commit hash recorded in `git log`).
 - ✅ **Any off-spec decision flagged.** — see §3.
@@ -59,3 +59,15 @@
 
 ## 8. What's now possible that wasn't before
 The app draws a real grid, so the build pipeline is proven end-to-end up to the point Xcode is required: once Lazar runs ⌘R, any future bug is isolated to new gameplay code, never the toolchain or project setup. Phase 1.03 has a concrete placeholder to swap out for the live board.
+
+## 9. Addendum — first-build fix (D-012), after initial filing
+Lazar opened the project in Xcode 27 and ran the first build. It failed:
+
+- **Error:** `Multiple commands produce '…/DerivedData/ECHO-…/…/ECHO.app/.gitkeep'`
+- **Plus 2 warnings:** `duplicate output file '…/.gitkeep'`
+
+**Cause:** Xcode's file-system synchronized groups copy `.gitkeep` into the app bundle as a **resource**. The three identically-named keepers — `ECHO/Models/.gitkeep`, `ECHO/Audio/.gitkeep`, `ECHO/Haptics/.gitkeep` — all map to the single output `ECHO.app/.gitkeep`, so three files collide (1 error + 2 duplicate-output warnings; the count matches the screenshot exactly). This directly contradicts the Phase 1.01 report's assumption (its §7) that synchronized groups ignore dotfiles — that assumption was wrong.
+
+**Fix (committed as a follow-up to this phase):** removed the three offending `.gitkeep` files. The empty `Models/`, `Audio/`, `Haptics/` folders are now untracked until their first real source file lands (they reappear automatically then). `.gitkeep` files *outside* any synchronized group (`Levels/`, `docs/design-handovers/`) were kept — they're never copied into a target, so they're harmless. Logged as **D-012**; recorded in `00_stack-and-config.md`, `current-state.md`, and `file-map.md`.
+
+**Still pending on Lazar's side:** **Clean Build Folder (⇧⌘K)** to clear the stale duplicate-output entries from DerivedData, then rebuild. The build should now get past resource-copying; confirm the centered grid renders, run ⌘U, then do the device install. This is a config fix only — no source code changed, so the clean macOS-SDK type-check from §2 still stands.
