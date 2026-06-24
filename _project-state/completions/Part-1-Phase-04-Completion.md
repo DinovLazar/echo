@@ -37,7 +37,7 @@ ECHO now has its keystone mechanic. As you move, the app records your run; press
 - **Code (edited):** `ECHO/Models/GameState.swift` (store `start`; add `currentRun`, `echoes`, recording in `move`, `fold()`, `clearEchoes()`, `position(of:)`), `ECHO/Views/BoardView.swift` (inject `state`; add the echo layer), `ECHO/App/ContentView.swift` (own the `GameState`; throwaway debug bar), `ECHOTests/ECHOTests.swift` (fold/replay suite added; 1.03 tests kept).
 - **Docs:** `ECHO-Decisions.md` (+D-014, D-015, D-016, D-017); `_project-state/current-state.md` (overwritten); `_project-state/file-map.md` (updated); `_project-state/00_stack-and-config.md` (Phase 1.04 entry); this report.
 - **Project file:** no `.pbxproj` change — synchronized groups auto-pick-up `Echo.swift`.
-- **Commit / branch:** `main` — phase commit hash recorded in the follow-up doc commit (a commit can't contain its own hash).
+- **Commit / branch:** `main` — phase commit `3951b4a` (this hash line is filled in by the immediately-following doc commit, since a commit can't contain its own hash).
 - **Ops / manual:** none. No secrets.
 
 ## 6. State updates done (code phases)
