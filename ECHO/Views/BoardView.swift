@@ -2,12 +2,19 @@
 //  BoardView.swift
 //  ECHO
 //
-//  Phase 1.03 (Grid + Move). The real, state-driven board — replaces the
-//  throwaway `HelloGridView`. It renders the placeholder grey lattice and a
-//  solid black rounded-square player, and routes both taps and swipes through the
-//  single `GameState.move(_:)` rule so the world advances one step at a time.
+//  Phase 1.03 (Grid + Move) → 1.04 (Fold). The real, state-driven board. It
+//  renders the placeholder grey lattice, any folded **echoes** as translucent
+//  grey squares, and a solid black rounded-square player on top, and routes both
+//  taps and swipes through the single `GameState.move(_:)` rule so the world
+//  advances one step at a time.
 //
-//  Visuals stay deliberately pre-design ("grey boxes on paper"): the real
+//  The board no longer owns its state — `ContentView` holds the `GameState` and
+//  passes it in, so the throwaway debug bar there can drive fold/clear on the same
+//  model. The board stays "just the board": no buttons live here.
+//
+//  No collision in 1.04 (Phase 1.05): echoes and the player may share a tile, so
+//  echoes are drawn with hit-testing off and the player simply draws last / on
+//  top. Visuals stay deliberately pre-design ("grey boxes on paper"): the real
 //  monochrome palette/accent/invert mode is Phase 2.01 and the tuned ~120 ms
 //  ease-in-out + squash-and-stretch motion is Phase 2.02. The slide here is a
 //  plain default animation placeholder, nothing more.
@@ -16,8 +23,9 @@
 import SwiftUI
 
 struct BoardView: View {
-    /// The board's state. Owned here for this phase; defaults to 7×7, centered.
-    @State private var state = GameState()
+    /// The board's state, owned by `ContentView` and passed in (Observation
+    /// re-renders this view when the state it reads changes).
+    let state: GameState
 
     // Placeholder look only — the real palette and motion land in Part 2.
     /// Thin neutral-grey cell border (carries no design meaning yet).
@@ -30,6 +38,10 @@ struct BoardView: View {
     private static let playerFraction: CGFloat = 0.76
     /// Minimum drag distance that counts as a swipe rather than a tap.
     private static let swipeThreshold: CGFloat = 20
+    /// Echo placeholder look (the real echo design is Phase 2.01): a mid-grey,
+    /// ~35%-opacity fill with a thin darker outline, drawn beneath the player.
+    private static let echoFill = Color(white: 0.5).opacity(0.35)
+    private static let echoOutline = Color(white: 0.25).opacity(0.55)
 
     var body: some View {
         GeometryReader { proxy in
@@ -44,6 +56,7 @@ struct BoardView: View {
 
             ZStack(alignment: .topLeading) {
                 lattice(cell: cell)
+                echoes(cell: cell)
                 playerSquare(cell: cell)
             }
             .frame(width: boardSize.width, height: boardSize.height)
@@ -73,6 +86,30 @@ struct BoardView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// The folded echoes: one translucent grey rounded square per echo, each at
+    /// its current cell and sliding between turns just like the player. Drawn
+    /// *beneath* the player (the black square always reads clearest) and with hit
+    /// testing off — there is no collision in 1.04, so they share tiles freely and
+    /// taps fall straight through to the cell beneath. Each echo has a stable `id`
+    /// so SwiftUI animates them independently.
+    private func echoes(cell: CGFloat) -> some View {
+        let size = cell * Self.playerFraction
+        return ForEach(state.echoes) { echo in
+            let position = state.position(of: echo)
+            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                .fill(Self.echoFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                        .strokeBorder(Self.echoOutline, lineWidth: Self.lineWidth)
+                )
+                .frame(width: size, height: size)
+                .position(x: (CGFloat(position.column) + 0.5) * cell,
+                          y: (CGFloat(position.row) + 0.5) * cell)
+                .animation(.easeInOut, value: position)
+                .allowsHitTesting(false)
         }
     }
 
@@ -122,5 +159,5 @@ struct BoardView: View {
 }
 
 #Preview {
-    BoardView()
+    BoardView(state: GameState())
 }

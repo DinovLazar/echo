@@ -72,3 +72,18 @@ The first real model code and tests were added. **No dependency, tool, or versio
 - **`-default-isolation MainActor`** is the `swiftc` frontend flag corresponding to the `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` build setting — recorded here for reproducible local type-checking in a no-Xcode environment.
 - **Still NOT verified here (no full Xcode — same caveat as 1.01/1.02):** the iOS Simulator build, the on-device ⌘R run, and the **⌘U** XCTest run. **Pinning still owed:** the exact **Xcode 27 / iOS SDK build numbers** (paste `xcodebuild -version` on Lazar's Mac).
 
+---
+
+## 2026-06-24 — Phase 1.04 fold / record & replay (Code track)
+
+The fold mechanic (`Echo` type, `GameState` record/fold/clear, echo rendering, debug bar) was added. **No dependency, tool, or version change this phase** — still Swift 6.4, **zero** Swift Package dependencies, deployment target `IPHONEOS_DEPLOYMENT_TARGET = 17.0`, bundle id `com.dinovlazar.echo`, display name `Echo` all unchanged. Recording the config-relevant facts and how they were verified:
+
+- **Concurrency regime unchanged (D-013, extended):** the new `Echo` value type follows the established discipline — `nonisolated struct Echo: Identifiable, Equatable, Sendable` (a `UUID` + `[Direction]`, both Sendable), so it is usable from any context like `GridCoordinate`/`Direction`. `GameState` stays `@MainActor @Observable`; the test case stays `@MainActor`. App target still sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; the test target does not.
+- **Toolchain caveat refined:** under this Swift 6.4 CLT, SwiftUI's **`@State` is now an attached macro** (`SwiftUIMacros.StateMacro`) whose plugin ships only with full Xcode — so, like `#Preview`, it can't be expanded here. For the views-type-check smoke test, `@State` is de-macroed to a plain property and `#Preview` is stripped in a throwaway copy; the production sources keep both and compile in real Xcode. `import XCTest` also does not resolve under CLT (confirmed `no such module 'XCTest'`).
+- **Verification performed in this environment (CLT only):**
+  - Model (`GridCoordinate` + `Direction` + `Echo` + `GameState`) type-checks clean under the app regime (`swiftc -typecheck -parse-as-library -default-isolation MainActor -sdk <MacOSX.sdk>`) **and** under the test regime (no flag) → exit 0 each.
+  - Views + model type-check clean under the app regime → exit 0 (with the `@State`/`#Preview` macro substitution above).
+  - The verbatim `ECHOTests.swift` (minus its two CLT-unresolvable imports) type-checks against the model API under the test regime via a minimal **XCTest shim** (`XCTestCase` + the `XCTAssert*` used) → exit 0.
+  - A standalone executable built from the **real** model sources (`main.swift` driving `@MainActor GameState` via `MainActor.assumeIsolated`) runs every test scenario (all 1.03 move checks + all 1.04 fold/replay checks) → **39/39 PASS**.
+- **Still NOT verified here (no full Xcode — same caveat as 1.01–1.03):** the iOS Simulator build, the on-device ⌘R run, and the **⌘U** XCTest run, plus a real screenshot. **Pinning still owed:** the exact **Xcode 27 / iOS SDK build numbers** (paste `xcodebuild -version` on Lazar's Mac).
+
