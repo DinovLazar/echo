@@ -33,7 +33,7 @@ ECHO's one hard rule is now live. From this phase on, if your step lands you on 
 - **Code (edited):** `ECHO/Models/GameState.swift` (collision check wired into `move(_:)`; new `playerCollides(previousPlayerCell:newPlayerCell:turn:)` and `restartRun()`; header/class doc-comments updated), `ECHO/Views/BoardView.swift` (stale "no collision" comments replaced with the accurate model-rule/immediate-snap-back picture — **comments only, no functional/render change**), `ECHOTests/ECHOTests.swift` (collision/restart suite added; three prior 1.04 tests re-pathed to non-colliding walks; all 1.03/1.04 coverage kept).
 - **Code (new):** none — no new source file; no `.pbxproj` edit (synchronized groups).
 - **Docs:** `ECHO-Decisions.md` (+D-018); `_project-state/current-state.md` (overwritten); `_project-state/file-map.md` (GameState/BoardView/tests lines refreshed; 1.05 report added); `_project-state/00_stack-and-config.md` (Phase 1.05 entry — no version change, verification + still-owed pinning recorded); this report.
-- **Commit / branch:** `main` — phase commit `<filled by the following doc commit>` (a commit can't contain its own hash; recorded by the immediately-following docs commit, as in 1.04).
+- **Commit / branch:** `main` — phase commit `87d0725` (this hash line is filled in by the immediately-following doc commit, since a commit can't contain its own hash — same pattern as 1.04's `3951b4a`).
 - **Ops / manual:** none. No secrets.
 
 ## 6. State updates done (code phases)
