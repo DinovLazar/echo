@@ -29,6 +29,7 @@
 - `_project-state/completions/Part-1-Phase-01-Completion.md` — Phase 1.01 (Scaffold) completion report
 - `_project-state/completions/Part-1-Phase-02-Completion.md` — Phase 1.02 (First device install) completion report
 - `_project-state/completions/Part-1-Phase-02-grid-layout-reference.svg` — deterministic layout reference for the hello-grid (NOT a Simulator screenshot)
+- `_project-state/completions/Part-1-Phase-03-Completion.md` — Phase 1.03 (Grid + Move) completion report
 
 ## Xcode project (`ECHO.xcodeproj/`)
 - `ECHO.xcodeproj/project.pbxproj` — the project definition (targets, build settings, synchronized groups)
@@ -38,9 +39,11 @@
 
 ## App source (`ECHO/`)
 - `ECHO/App/ECHOApp.swift` — `@main` SwiftUI App entry point; hosts `ContentView`
-- `ECHO/App/ContentView.swift` — root view: full-bleed paper background + centered `HelloGridView` (Phase 1.02 hello-grid placeholder)
-- `ECHO/Models/` — reserved: grid, turn engine, echo/replay, collision, win checks. **Not git-tracked while empty** (no `.gitkeep` — it collides in Xcode synchronized groups, see D-012); reappears when its first source file lands (Phase 1.03)
-- `ECHO/Views/HelloGridView.swift` — Phase 1.02 throwaway placeholder: static, non-interactive 5×5 grey square grid (replaced by the real board in Phase 1.03)
+- `ECHO/App/ContentView.swift` — root view: full-bleed paper background + centered `BoardView` (the real board)
+- `ECHO/Models/GameState.swift` — `@MainActor @Observable` board state: dimensions (param, default 7×7), player cell (default center), turn counter, and the `move(_:)` rule (one tile, clamp off-grid, +1 turn per committed move). Pure, unit-tested (D-013)
+- `ECHO/Models/GridCoordinate.swift` — `nonisolated` value type for a grid cell (`row`, `column`; origin top-left); `Equatable`/`Hashable`/`Sendable`
+- `ECHO/Models/Direction.swift` — `nonisolated` enum of the four orthogonal moves; `offset` (row/col delta) + `init?(from:to:)` adjacency rule used by tap input
+- `ECHO/Views/BoardView.swift` — the real board: grey lattice with per-cell tap targets + black rounded-square player; swipe (drag) and tap input route through `GameState.move(_:)`; placeholder `.easeInOut` slide. Replaces the removed `HelloGridView`
 - `ECHO/Audio/` — reserved: generative percussion, Part 2. **Not git-tracked while empty** (no `.gitkeep`, see D-012); reappears when populated
 - `ECHO/Haptics/` — reserved: Core Haptics mapping, Part 2. **Not git-tracked while empty** (no `.gitkeep`, see D-012); reappears when populated
 - `ECHO/Resources/Assets.xcassets/Contents.json` — asset catalog root
@@ -51,7 +54,7 @@
 - `Levels/.gitkeep` — reserved for room JSON files (added from Phase 1.06; not yet wired into the build)
 
 ## Tests (`ECHOTests/`)
-- `ECHOTests/ECHOTests.swift` — one trivial passing test proving the test target compiles and runs
+- `ECHOTests/ECHOTests.swift` — `@MainActor` XCTest coverage of the move model: four directions, four edge no-ops, the turn-counter rule, defaults, and the `Direction(from:to:)` tap rule
 
 ## Reserved
 - `docs/design-handovers/.gitkeep` — reserved for Design-phase handover docs
