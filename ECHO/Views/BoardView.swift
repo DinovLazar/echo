@@ -12,9 +12,15 @@
 //  passes it in, so the throwaway debug bar there can drive fold/clear on the same
 //  model. The board stays "just the board": no buttons live here.
 //
-//  No collision in 1.04 (Phase 1.05): echoes and the player may share a tile, so
-//  echoes are drawn with hit-testing off and the player simply draws last / on
-//  top. Visuals stay deliberately pre-design ("grey boxes on paper"): the real
+//  Collision is a turn-engine rule (Phase 1.05), not a UI one: touching an echo
+//  dissolves the player and restarts the run inside `GameState`, and because the
+//  model is `@Observable` the board reacts for free — a death just resets `turn`
+//  and `player`, so the player and every echo animate back to `start` with the
+//  same `.easeInOut` slide (an immediate snap-back; the death "fizz" and any
+//  freeze-frame are Phase 2.03). Echoes are drawn beneath the player and with
+//  hit-testing off purely so a tap falls through to the cell underneath (the
+//  player still steps via the cell tap) — that is unrelated to game collision.
+//  Visuals stay deliberately pre-design ("grey boxes on paper"): the real
 //  monochrome palette/accent/invert mode is Phase 2.01 and the tuned ~120 ms
 //  ease-in-out + squash-and-stretch motion is Phase 2.02. The slide here is a
 //  plain default animation placeholder, nothing more.
@@ -92,9 +98,12 @@ struct BoardView: View {
     /// The folded echoes: one translucent grey rounded square per echo, each at
     /// its current cell and sliding between turns just like the player. Drawn
     /// *beneath* the player (the black square always reads clearest) and with hit
-    /// testing off — there is no collision in 1.04, so they share tiles freely and
-    /// taps fall straight through to the cell beneath. Each echo has a stable `id`
-    /// so SwiftUI animates them independently.
+    /// testing off so a tap falls straight through to the cell beneath — a UI
+    /// concern (let the tap move the player), separate from game collision, which
+    /// is a turn-engine rule in `GameState` (touching an echo dissolves you and
+    /// restarts the run). Each echo has a stable `id` so SwiftUI animates them
+    /// independently; on a death `turn` resets to 0 and every echo slides back to
+    /// `start`.
     private func echoes(cell: CGFloat) -> some View {
         let size = cell * Self.playerFraction
         return ForEach(state.echoes) { echo in

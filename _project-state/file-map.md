@@ -31,6 +31,7 @@
 - `_project-state/completions/Part-1-Phase-02-grid-layout-reference.svg` — deterministic layout reference for the hello-grid (NOT a Simulator screenshot)
 - `_project-state/completions/Part-1-Phase-03-Completion.md` — Phase 1.03 (Grid + Move) completion report
 - `_project-state/completions/Part-1-Phase-04-Completion.md` — Phase 1.04 (Fold — record & replay) completion report
+- `_project-state/completions/Part-1-Phase-05-Completion.md` — Phase 1.05 (Collision + restart) completion report
 
 ## Xcode project (`ECHO.xcodeproj/`)
 - `ECHO.xcodeproj/project.pbxproj` — the project definition (targets, build settings, synchronized groups)
@@ -41,11 +42,11 @@
 ## App source (`ECHO/`)
 - `ECHO/App/ECHOApp.swift` — `@main` SwiftUI App entry point; hosts `ContentView`
 - `ECHO/App/ContentView.swift` — root view: full-bleed paper background; **owns the `GameState`** and lays out `BoardView` above a throwaway debug bar (Fold / Clear / `turn · echoes` readout, D-017)
-- `ECHO/Models/GameState.swift` — `@MainActor @Observable` board state: dimensions (param, default 7×7), stored `start` cell (default center), player cell, turn counter, current run (`[Direction]`) and echoes (`[Echo]`); `move(_:)` (one tile, clamp off-grid, +1 turn, records the move), `fold()`, `clearEchoes()`, `position(of:)`. Pure, unit-tested (D-013, D-014, D-015)
+- `ECHO/Models/GameState.swift` — `@MainActor @Observable` board state: dimensions (param, default 7×7), stored `start` cell (default center), player cell, turn counter, current run (`[Direction]`) and echoes (`[Echo]`); `move(_:)` (one tile, clamp off-grid, +1 turn, records the move, then checks collision and restarts on a touch), `playerCollides(previousPlayerCell:newPlayerCell:turn:)` (pure collision predicate — land-on OR cross-paths, D-018), `restartRun()` (death restart / future reset-run: player→start, turn→0, run emptied, echoes kept), `fold()`, `clearEchoes()`, `position(of:)`. Pure, unit-tested (D-013, D-014, D-015, D-018)
 - `ECHO/Models/Echo.swift` — `nonisolated` value type for one folded run: stable `id: UUID` + recorded `moves: [Direction]`; `position(start:turn:)` is a pure function of start+moves+turn (exhausted echo stands still). `Identifiable`/`Equatable`/`Sendable` (D-014)
 - `ECHO/Models/GridCoordinate.swift` — `nonisolated` value type for a grid cell (`row`, `column`; origin top-left); `Equatable`/`Hashable`/`Sendable`
 - `ECHO/Models/Direction.swift` — `nonisolated` enum of the four orthogonal moves; `offset` (row/col delta) + `init?(from:to:)` adjacency rule used by tap input
-- `ECHO/Views/BoardView.swift` — the real board: grey lattice with per-cell tap targets + translucent grey echoes (drawn beneath, no collision in 1.04) + black rounded-square player on top; takes the `GameState` injected from `ContentView`; swipe (drag) and tap input route through `GameState.move(_:)`; placeholder `.easeInOut` slide
+- `ECHO/Views/BoardView.swift` — the real board: grey lattice with per-cell tap targets + translucent grey echoes (drawn beneath; hit-testing off so taps reach the cell, a UI concern unrelated to game collision) + black rounded-square player on top; takes the `GameState` injected from `ContentView`; swipe (drag) and tap input route through `GameState.move(_:)`; placeholder `.easeInOut` slide doubles as the death snap-back (collision is a model rule, so a death just resets turn/player and the board reacts via Observation)
 - `ECHO/Audio/` — reserved: generative percussion, Part 2. **Not git-tracked while empty** (no `.gitkeep`, see D-012); reappears when populated
 - `ECHO/Haptics/` — reserved: Core Haptics mapping, Part 2. **Not git-tracked while empty** (no `.gitkeep`, see D-012); reappears when populated
 - `ECHO/Resources/Assets.xcassets/Contents.json` — asset catalog root
@@ -56,7 +57,7 @@
 - `Levels/.gitkeep` — reserved for room JSON files (added from Phase 1.06; not yet wired into the build)
 
 ## Tests (`ECHOTests/`)
-- `ECHOTests/ECHOTests.swift` — `@MainActor` XCTest coverage of the move model (four directions, four edge no-ops, turn-counter rule, defaults, tap rule) **plus the fold/replay suite** (recording, fold→one echo + rewind, replay fidelity, exhausted-echo standstill, two independent echoes, different-length lockstep, empty-fold no-op, `clearEchoes()` pristine, no-op-not-recorded)
+- `ECHOTests/ECHOTests.swift` — `@MainActor` XCTest coverage of the move model (four directions, four edge no-ops, turn-counter rule, defaults, tap rule), the fold/replay suite (recording, fold→one echo + rewind, replay fidelity, exhausted-echo standstill, two independent echoes, different-length lockstep, empty-fold no-op, `clearEchoes()` pristine, no-op-not-recorded), **plus the collision/restart suite** (land-on via real play, turn-0 immunity post-fold + post-death/no-loop, fatal partial run discarded, exhausted-echo land-on, one-of-many-echoes single death, no-echoes regression, cross-paths clause at the predicate level). Three prior 1.04 replay/lock tests re-pathed to non-colliding walks now that retracing an echo is fatal (D-018)
 
 ## Reserved
 - `docs/design-handovers/.gitkeep` — reserved for Design-phase handover docs

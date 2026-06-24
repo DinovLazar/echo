@@ -140,6 +140,14 @@
 - **Consequences:** Board and debug controls share one source of truth with a minimal, idiomatic Observation wiring; the bar is isolated to `ContentView` and deletes cleanly. **Honest downside:** `ContentView` is no longer purely presentational (it owns game state), and the debug bar is deliberately unstyled throwaway UI that must actually be removed in Parts 2–3 — tracked in `current-state.md` and the completion report so it isn't forgotten.
 - **Links:** Phase 1.04 completion report §3; `ECHO/App/ContentView.swift`, `ECHO/Views/BoardView.swift`; Phase 1.03 report §7 (anticipated this lift); D-013 (Observation/`@MainActor` model); Phase 1.07 (real reset run / step back).
 
+### D-018 · 2026-06-24 · Echo collision counts cross-paths (swaps), not only shared tiles
+- **Status:** Accepted
+- **Context:** Phase 1.05 makes echoes lethal. Two collision models exist: land-on only (die only if you end a turn on an echo's tile) vs. land-on + cross-paths (also die if you and a thing that moved this step traded adjacent tiles).
+- **Decision:** Both count — the collision predicate fires on land-on OR cross-paths. Past selves are solid walls you can never pass through.
+- **Alternatives considered:** Land-on only — rejected because the strict rule is the correct general predicate, it future-proofs the moving hazards / sliding blocks arriving in Phase 1.06 (which CAN cross paths with the player), and it costs nothing to write once now versus revisiting collision later.
+- **Consequences:** A defensive cross-paths clause that is currently unreachable against echoes — player and echoes share an origin and one-step-per-turn cadence, so they are always the same checkerboard parity at a given turn, while a swap requires opposite-parity adjacent tiles. So for echoes specifically this is behaviourally identical to land-on only today; the clause first becomes reachable with independently-moving hazards (Phase 1.06).
+- **Links:** Phase 1.05; Phase 1.06 (hazards); ECHO-Plan §14 point 4; relates to D-016 (which deferred collision to this phase).
+
 ---
 
 ### Decision-log conventions

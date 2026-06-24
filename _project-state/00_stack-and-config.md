@@ -87,3 +87,18 @@ The fold mechanic (`Echo` type, `GameState` record/fold/clear, echo rendering, d
   - A standalone executable built from the **real** model sources (`main.swift` driving `@MainActor GameState` via `MainActor.assumeIsolated`) runs every test scenario (all 1.03 move checks + all 1.04 fold/replay checks) → **39/39 PASS**.
 - **Still NOT verified here (no full Xcode — same caveat as 1.01–1.03):** the iOS Simulator build, the on-device ⌘R run, and the **⌘U** XCTest run, plus a real screenshot. **Pinning still owed:** the exact **Xcode 27 / iOS SDK build numbers** (paste `xcodebuild -version` on Lazar's Mac).
 
+---
+
+## 2026-06-24 — Phase 1.05 collision + restart (Code track)
+
+The collision rule and death restart (`GameState.playerCollides(...)`, `GameState.restartRun()`, `move(_:)` wiring) plus the collision test suite were added. **No dependency, tool, or version change this phase** — still Swift 6.4, **zero** Swift Package dependencies, deployment target `IPHONEOS_DEPLOYMENT_TARGET = 17.0`, bundle id `com.dinovlazar.echo`, display name `Echo`, all unchanged. No `.pbxproj` edit (synchronized groups; no files added/renamed). Recording the config-relevant facts and how they were verified:
+
+- **Concurrency regime unchanged (D-013):** the new collision predicate and `restartRun()` are plain methods on the `@MainActor @Observable GameState`; they read only `start`/`echoes` and the `nonisolated` value types, so nothing new crosses an isolation boundary. App target still sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; the test target does not.
+- **Toolchain still CLT-only (confirmed):** `xcodebuild -version` → `xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance`; `simctl` absent. So the exact **Xcode 27 / iOS SDK build numbers remain unpinned** — still owed from 1.02, to be captured on Lazar's Mac. Swift CLI confirms `Apple Swift version 6.4 (swiftlang-6.4.0.23.5 clang-2100.3.23.3)`, target `arm64-apple-macosx27.0.0`; macOS SDK present is `MacOSX27.0.sdk` (CLT).
+- **Verification performed in this environment (CLT only):**
+  - Model (`GridCoordinate` + `Direction` + `Echo` + `GameState`) type-checks clean under the app regime (`swiftc -typecheck -parse-as-library -default-isolation MainActor -sdk <MacOSX.sdk>`) **and** under the test regime (no flag) → exit 0 each.
+  - Views + model type-check clean under the app regime → exit 0 (with the `@State`/`#Preview` macro substitution CLT requires).
+  - The verbatim `ECHOTests.swift` (minus its two CLT-unresolvable imports) type-checks against the model API under the test regime via a minimal **XCTest shim** (confirms `playerCollides` and the new test methods compile) → exit 0.
+  - A standalone executable built from the **real** model sources runs every test scenario (all 1.03 move checks + all 1.04 fold/replay checks + all 1.05 collision/restart checks) → **134/134 PASS**.
+- **Still NOT verified here (no full Xcode — same caveat as 1.01–1.04):** the iOS Simulator build, the on-device ⌘R run, and the **⌘U** XCTest run, plus a real screenshot of the death snap-back. **Pinning still owed:** the exact **Xcode 27 / iOS SDK build numbers** (paste `xcodebuild -version` on Lazar's Mac).
+
