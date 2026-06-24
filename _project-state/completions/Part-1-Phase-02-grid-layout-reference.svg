@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Part-1-Phase-02-grid-layout-reference.svg
+
+  NOT a Simulator screenshot. This is a deterministic layout reference computed
+  to match HelloGridView/ContentView exactly, so the rendered grid on Lazar's
+  device/Simulator can be checked against it. (Full Xcode was not available in
+  the Code environment, so a real Simulator capture is Lazar's pending step.)
+
+  Geometry: iPhone portrait 390x844 pt. Paper fills full-bleed. The grid sits
+  within the safe area (top inset 59, bottom 34); it is a 5x5 lattice sized to
+  82% of the smaller available dimension (390 -> side 319.8, cell 63.96),
+  centered. Paper = rgb(245,240,227) (Color 0.96/0.94/0.89); grid stroke =
+  rgb(178,178,178) (Color white:0.7), width 1.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <!-- Paper (full-bleed, including under the notch / home indicator) -->
+  <rect x="0" y="0" width="390" height="844" fill="rgb(245,240,227)"/>
+
+  <!-- 5x5 grid, centered within the safe area. Drawn as a 6x6 lattice of thin
+       grey lines, which is visually identical to the per-cell borders the code
+       renders. -->
+  <g stroke="rgb(178,178,178)" stroke-width="1" shape-rendering="crispEdges">
+    <!-- vertical lines: x = 35.10 + k*63.96 -->
+    <line x1="35.10"  y1="274.60" x2="35.10"  y2="594.40"/>
+    <line x1="99.06"  y1="274.60" x2="99.06"  y2="594.40"/>
+    <line x1="163.02" y1="274.60" x2="163.02" y2="594.40"/>
+    <line x1="226.98" y1="274.60" x2="226.98" y2="594.40"/>
+    <line x1="290.94" y1="274.60" x2="290.94" y2="594.40"/>
+    <line x1="354.90" y1="274.60" x2="354.90" y2="594.40"/>
+    <!-- horizontal lines: y = 274.60 + k*63.96 -->
+    <line x1="35.10" y1="274.60" x2="354.90" y2="274.60"/>
+    <line x1="35.10" y1="338.56" x2="354.90" y2="338.56"/>
+    <line x1="35.10" y1="402.52" x2="354.90" y2="402.52"/>
+    <line x1="35.10" y1="466.48" x2="354.90" y2="466.48"/>
+    <line x1="35.10" y1="530.44" x2="354.90" y2="530.44"/>
+    <line x1="35.10" y1="594.40" x2="354.90" y2="594.40"/>
+  </g>
+</svg>

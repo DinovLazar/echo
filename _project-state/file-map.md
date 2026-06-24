@@ -27,6 +27,8 @@
 - `_project-state/00_stack-and-config.md` — append-only stack/config log with pinned versions
 - `_project-state/completions/Part-X-Phase-YY-Completion.md` — completion-report template
 - `_project-state/completions/Part-1-Phase-01-Completion.md` — Phase 1.01 (Scaffold) completion report
+- `_project-state/completions/Part-1-Phase-02-Completion.md` — Phase 1.02 (First device install) completion report
+- `_project-state/completions/Part-1-Phase-02-grid-layout-reference.svg` — deterministic layout reference for the hello-grid (NOT a Simulator screenshot)
 
 ## Xcode project (`ECHO.xcodeproj/`)
 - `ECHO.xcodeproj/project.pbxproj` — the project definition (targets, build settings, synchronized groups)
@@ -36,9 +38,9 @@
 
 ## App source (`ECHO/`)
 - `ECHO/App/ECHOApp.swift` — `@main` SwiftUI App entry point; hosts `ContentView`
-- `ECHO/App/ContentView.swift` — Phase 1.01 placeholder root view: full-screen warm off-white background
+- `ECHO/App/ContentView.swift` — root view: full-bleed paper background + centered `HelloGridView` (Phase 1.02 hello-grid placeholder)
 - `ECHO/Models/.gitkeep` — reserved: grid, turn engine, echo/replay, collision, win checks (empty)
-- `ECHO/Views/.gitkeep` — reserved: SwiftUI screens and the board (empty)
+- `ECHO/Views/HelloGridView.swift` — Phase 1.02 throwaway placeholder: static, non-interactive 5×5 grey square grid (replaced by the real board in Phase 1.03)
 - `ECHO/Audio/.gitkeep` — reserved: generative percussion, Part 2 (empty)
 - `ECHO/Haptics/.gitkeep` — reserved: Core Haptics mapping, Part 2 (empty)
 - `ECHO/Resources/Assets.xcassets/Contents.json` — asset catalog root

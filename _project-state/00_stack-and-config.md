@@ -45,3 +45,14 @@ The Xcode project was created during Phase 1.01. Confirmed/observed versions and
 
 **Environment caveat (important for the next session):** the machine that scaffolded the project had **only the Xcode Command Line Tools installed, not full Xcode** (`xcodebuild`/`simctl` unavailable). The project therefore could **not** be compiled or run in the Simulator during Phase 1.01. Versions above are confirmed from the Swift CLI; the **Xcode 27 / iOS SDK build numbers must be pinned here by the first session that opens the project in full Xcode** (Phase 1.02), along with confirmation that ⌘R builds and runs.
 
+---
+
+## 2026-06-24 — Phase 1.02 first device install (Code track)
+
+The hello-grid placeholder was added. No dependency, tool, or version change this phase — recording the config facts the brief asked to capture:
+
+- **Toolchain (unchanged):** Swift 6.4 confirmed from the CLI (`swift --version` → `Apple Swift version 6.4 (swiftlang-6.4.0.23.5 clang-2100.3.23.3)`, target `arm64-apple-macosx27.0.0`). Deployment target unchanged at `IPHONEOS_DEPLOYMENT_TARGET = 17.0`. No Swift Package dependencies added (still zero).
+- **Signing:** `CODE_SIGN_STYLE = Automatic` on **both** targets (`ECHO` and `ECHOTests`) — "Automatically manage signing" is on. **No `DEVELOPMENT_TEAM` is set** in `project.pbxproj` (left for Lazar to pick his personal Apple ID team at device-install time). Already true since 1.01; confirmed unchanged here.
+- **Verification performed in this environment:** `swiftc -typecheck -parse-as-library` of `ContentView.swift` + `HelloGridView.swift` against the **macOS** SDK (`/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk`) → **exit 0 / clean** (the `#Preview` macro is excluded because its plugin ships only with full Xcode, not CLT). This is a syntax/type smoke test, **not** an iOS Simulator build.
+- **Still NOT verified here (no full Xcode — same caveat as 1.01):** the iOS Simulator build, the on-device ⌘R run, the `⌘U` test run, and a real Simulator/device screenshot. **Pinning still owed:** the exact **Xcode 27 / iOS SDK build numbers** must be appended by the first session that opens the project in full Xcode (Lazar's Mac).
+
