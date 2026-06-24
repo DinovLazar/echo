@@ -35,7 +35,7 @@ ECHO now has a real board instead of a static placeholder: a centered 7×7 grey 
 - **Code (deleted):** `ECHO/Views/HelloGridView.swift`.
 - **Docs:** `ECHO-Decisions.md` (+D-013); `_project-state/current-state.md` (overwritten); `_project-state/file-map.md` (updated); `_project-state/00_stack-and-config.md` (Phase 1.03 entry); this report.
 - **Project file:** no `.pbxproj` change needed — synchronized groups auto-pick-up the new `Models/`/`Views/` files.
-- **Commit / branch:** `main` — commit `e96b52a` (this report's hash line filled by amend).
+- **Commit / branch:** `main` — phase commit `fc47d28` (this hash line corrected in the immediately-following doc commit, since a commit can't contain its own hash).
 - **Ops / manual:** none. No secrets.
 
 ## 6. State updates done (code phases)
