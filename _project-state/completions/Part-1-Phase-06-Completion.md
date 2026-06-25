@@ -41,7 +41,7 @@ None of substance. The collision-before-win test uses a **hazard** sitting on th
 - **Docs:** `ECHO-Decisions.md` (D-019…D-027), `_project-state/current-state.md` (overwritten), `_project-state/file-map.md`, `_project-state/00_stack-and-config.md`, this report.
 - **Design:** none (phase is pre-design grey boxes; no handover by design).
 - **Ops / manual:** none. No secrets anywhere.
-- **Commit / branch:** single commit on `main` (hash recorded in a short follow-up after commit).
+- **Commit / branch:** `main` — phase commit **`2d10fb0`** ("feat: room contents, level data & win … (Phase 1.06)"), plus this hash-recording docs follow-up (the repo's established per-phase pattern).
 
 ## 6. State updates done (code phases)
 - [x] `current-state.md` overwritten to reflect what actually shipped
