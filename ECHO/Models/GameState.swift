@@ -3,12 +3,12 @@
 //  ECHO
 //
 //  Phase 1.03 (Grid + Move) → 1.04 (Fold — record & replay) → 1.05 (Collision +
-//  restart) → 1.06 (Room contents, level data & win). The board's observable
-//  state and the rule that advances the world: a single committed move per legal
-//  step, against one shared turn counter. Folding the current run banks it as a
-//  grey echo and rewinds the board to turn 0; because each echo's position is a
-//  pure function of (start, its moves, the turn), all echoes step in lockstep
-//  automatically (Plan §14, points 1–2).
+//  restart) → 1.06 (Room contents, level data & win) → 1.07 (Reset run & step
+//  back). The board's observable state and the rule that advances the world: a
+//  single committed move per legal step, against one shared turn counter. Folding
+//  the current run banks it as a grey echo and rewinds the board to turn 0; because
+//  each echo's position is a pure function of (start, its moves, the turn), all
+//  echoes step in lockstep automatically (Plan §14, points 1–2).
 //
 //  Kept pure and view-independent so it can be unit-tested directly. Phase 1.06
 //  fills the empty board in with the contents that make it a puzzle, all driven
@@ -25,6 +25,18 @@
 //      evaluated before win on the same committed step, so a tile that is both
 //      exit and lethal is a death (D-023).
 //    • Echo budget: fold is refused at the cap (D-027).
+//
+//  Phase 1.07 adds the two everyday supporting controls (Plan §14), both of which
+//  fall straight out of the turn model and need no new stored state:
+//    • Reset run scraps the current attempt but keeps banked echoes — exactly the
+//      existing `restartRun()` op (the death restart), now also exposed to a
+//      control (D-029).
+//    • Step back undoes one committed move: pop the last recorded move, decrement
+//      the shared turn, and replay `player` from `start`. The whole derived world
+//      (echoes, hazards, switches, doors) rolls back for free because all of it is
+//      a function of `turn` + positions. It is a pure positional rollback — no
+//      collision/win check, never touches echoes, intra-run only (D-028, D-030,
+//      D-031). There is no redo this phase (D-032).
 //
 //  Echoes and hazards replay verbatim — neither re-checks walls/doors each turn
 //  (walls are static so never bite; door nuance is handled by level design). The
@@ -294,17 +306,54 @@ final class GameState {
     }
 
     /// Restart the current run — present-you dissolving on contact (Phase 1.05),
-    /// and the very operation Phase 1.07 will attach the real "reset run" control
-    /// to (so wire that control here, don't duplicate this). Returns present-you to
-    /// `start`, the turn to 0, empties the current run, and clears any win flag,
-    /// while **leaving every folded echo intact** so they keep replaying.
-    /// Deliberately distinct from `clearEchoes()`, which also wipes the echoes; a
-    /// death keeps them.
+    /// and the single op the player-facing **reset run** control is wired to as of
+    /// Phase 1.07 (so the control reuses this; it is not duplicated — D-029).
+    /// Returns present-you to `start`, the turn to 0, empties the current run, and
+    /// clears any win flag, while **leaving every folded echo intact** so they keep
+    /// replaying. Allowed at any time (it is a full restart, so it is fine after a
+    /// win — clearing `hasWon` is what unlocks the room, D-031). Deliberately
+    /// distinct from `clearEchoes()`, which also wipes the echoes; a reset keeps them.
     func restartRun() {
         player = start
         turn = 0
         currentRun = []
         hasWon = false
+    }
+
+    /// **Step back** — undo a single committed move of the current run (Plan §14,
+    /// one of the two supporting controls). A pure, deterministic positional
+    /// rollback to the tile present-you occupied one turn earlier; the whole derived
+    /// world (echoes, hazards, switches, doors) recomputes for free because each is
+    /// a function of `turn` + positions, so rolling the turn back recomputes the
+    /// board (D-028).
+    ///
+    /// Refused (a no-op, returning `false`) when input is locked by a win (symmetry
+    /// with `move(_:)` — D-031) or when the current run is **empty** (i.e. `turn == 0`,
+    /// the start-stack right after a fold/restart): there is nothing to undo, and
+    /// step-back is **intra-run only** — it never crosses the fold boundary and never
+    /// removes a banked echo (D-030).
+    ///
+    /// Otherwise it pops the last recorded move, decrements the shared `turn` by one,
+    /// and restores `player` by replaying the now-shorter run from `start`. It runs
+    /// **no collision check and no win check** — it rolls back to a turn the player
+    /// already occupied alive — and never mutates `echoes`. Replaying from `start`
+    /// (rather than subtracting the popped offset) keeps `currentRun` the single
+    /// source of truth, so `player` can never drift from it (D-028). Returns whether
+    /// a move was undone.
+    @discardableResult
+    func stepBack() -> Bool {
+        guard !hasWon else { return false }              // input locked after a win (D-031)
+        guard !currentRun.isEmpty else { return false }  // turn 0: nothing to undo (D-030)
+
+        currentRun.removeLast()
+        turn -= 1
+        var cell = start
+        for direction in currentRun {
+            cell = GridCoordinate(row: cell.row + direction.offset.row,
+                                  column: cell.column + direction.offset.column)
+        }
+        player = cell
+        return true
     }
 
     /// **Fold** the current run into a permanent grey echo, then rewind the whole

@@ -718,4 +718,198 @@ final class ECHOTests: XCTestCase {
         XCTAssertTrue(state.echoes.isEmpty)
         XCTAssertFalse(state.hasWon)
     }
+
+    // MARK: - Step back (Phase 1.07)
+
+    /// One `stepBack()` undoes the last committed move: the turn drops by one, the
+    /// last recorded direction is popped, and the player returns to the tile it
+    /// occupied at the new (lower) turn.
+    func testStepBackUndoesOneMoveToPriorTurn() {
+        let state = GameState()                              // bare 7×7, start (3,3)
+        state.move(.up)                                      // (2,3) t1
+        state.move(.right)                                   // (2,4) t2
+        state.move(.right)                                   // (2,5) t3
+        XCTAssertEqual(state.turn, 3)
+        XCTAssertEqual(state.currentRun, [.up, .right, .right])
+        XCTAssertEqual(state.player, GridCoordinate(row: 2, column: 5))
+
+        XCTAssertTrue(state.stepBack())
+        XCTAssertEqual(state.turn, 2)
+        XCTAssertEqual(state.currentRun, [.up, .right])
+        XCTAssertEqual(state.player, GridCoordinate(row: 2, column: 4))   // its turn-2 tile
+    }
+
+    /// At turn 0 (the start-stack right after a fold) `stepBack()` is a no-op: turn,
+    /// run, player and echoes are all unchanged, and — crucially — no banked echo is
+    /// removed. Step-back is intra-run only; it never un-folds (D-030).
+    func testStepBackAtTurnZeroIsNoOpAndNeverUnfolds() {
+        let state = GameState()
+        state.move(.up); state.move(.right)
+        XCTAssertTrue(state.fold())                          // bank an echo; back at turn 0
+        XCTAssertEqual(state.echoes.count, 1)
+        XCTAssertEqual(state.turn, 0)
+        XCTAssertTrue(state.currentRun.isEmpty)
+        XCTAssertEqual(state.player, state.start)
+
+        XCTAssertFalse(state.stepBack())                     // nothing to undo
+        XCTAssertEqual(state.turn, 0)
+        XCTAssertTrue(state.currentRun.isEmpty)
+        XCTAssertEqual(state.player, state.start)
+        XCTAssertEqual(state.echoes.count, 1)                // echo NOT removed
+        XCTAssertEqual(state.echoes[0].moves, [.up, .right])
+    }
+
+    /// Repeated `stepBack()` walks the current run all the way back to turn 0
+    /// move-by-move; the banked echo is preserved at every step.
+    func testRepeatedStepBackWalksRunToTurnZeroKeepingEchoes() {
+        let state = GameState()
+        state.move(.up); state.move(.up); state.fold()       // echo [.up,.up] → stands on (1,3)
+        XCTAssertEqual(state.echoes.count, 1)
+
+        // A fresh K-move run kept clear of the standing echo (down/right of start).
+        let run: [Direction] = [.down, .right, .right, .down]   // K = 4
+        for d in run { state.move(d) }
+        XCTAssertEqual(state.turn, 4)
+        XCTAssertEqual(state.currentRun, run)
+
+        for remaining in stride(from: run.count - 1, through: 0, by: -1) {
+            XCTAssertTrue(state.stepBack())
+            XCTAssertEqual(state.turn, remaining)
+            XCTAssertEqual(state.currentRun.count, remaining)
+            XCTAssertEqual(state.echoes.count, 1)            // echo preserved throughout
+        }
+        XCTAssertEqual(state.turn, 0)
+        XCTAssertTrue(state.currentRun.isEmpty)
+        XCTAssertEqual(state.player, state.start)
+        XCTAssertEqual(state.echoes.count, 1)
+    }
+
+    /// `stepBack()` is refused while `hasWon` (symmetry with `move`/`fold`); nothing
+    /// changes — the won position stays put (D-031).
+    func testStepBackRefusedWhileWon() {
+        let state = GameState(width: 3, height: 3,
+                              start: GridCoordinate(row: 0, column: 0),
+                              exit: GridCoordinate(row: 0, column: 2))
+        state.move(.right); state.move(.right)               // reach exit (0,2) → win at t2
+        XCTAssertTrue(state.hasWon)
+        XCTAssertEqual(state.turn, 2)
+
+        XCTAssertFalse(state.stepBack())                     // refused while won
+        XCTAssertTrue(state.hasWon)
+        XCTAssertEqual(state.turn, 2)
+        XCTAssertEqual(state.player, GridCoordinate(row: 0, column: 2))
+        XCTAssertEqual(state.currentRun, [.right, .right])
+    }
+
+    /// After a `stepBack()`, the next `move(_:)` records onto the shortened run,
+    /// ticks the turn up from the rolled-back value, and lands the player on the new
+    /// branch — the `turn == currentRun.count` invariant is intact across the splice.
+    func testStepBackThenBranchMoveRecordsOnShortenedRun() {
+        let state = GameState()
+        state.move(.up); state.move(.up); state.move(.up)    // (0,3) t3
+        XCTAssertEqual(state.currentRun, [.up, .up, .up])
+        XCTAssertEqual(state.player, GridCoordinate(row: 0, column: 3))
+
+        XCTAssertTrue(state.stepBack())                      // back to (1,3) t2
+        XCTAssertEqual(state.turn, 2)
+        XCTAssertEqual(state.currentRun, [.up, .up])
+        XCTAssertEqual(state.player, GridCoordinate(row: 1, column: 3))
+
+        XCTAssertTrue(state.move(.right))                    // branch: (1,4) t3
+        XCTAssertEqual(state.turn, 3)
+        XCTAssertEqual(state.currentRun, [.up, .up, .right]) // recorded onto the shortened run
+        XCTAssertEqual(state.player, GridCoordinate(row: 1, column: 4))
+        XCTAssertEqual(state.currentRun.count, state.turn)   // invariant holds
+    }
+
+    /// The whole derived world rolls back with the turn. With a switch+door, a
+    /// patrolling hazard, and an echo standing on the switch from turn 2, advancing
+    /// to turn 2 opens the door and moves the hazard; a single `stepBack()` to turn 1
+    /// restores every derived reading (switch-held, door-open, hazard tile, echo
+    /// tile) to its turn-1 value — because each is a pure function of `turn`+positions.
+    func testDerivedWorldRollsBackWithTheTurn() {
+        let s1 = Switch(id: "s1", cell: GridCoordinate(row: 4, column: 2))
+        let d1 = Door(id: "d1", cells: [GridCoordinate(row: 2, column: 2)], heldBy: ["s1"])
+        let h1 = Hazard(id: "h1", start: GridCoordinate(row: 0, column: 0),
+                        path: [.right, .left], loops: true)  // (0,1) at odd t, (0,0) at even t
+        let state = GameState(width: 5, height: 5,
+                              start: GridCoordinate(row: 4, column: 0),
+                              echoBudget: 1,
+                              switches: [s1], doors: [d1], hazards: [h1])
+
+        // Bank an echo that stands on the switch from turn 2 onward.
+        state.move(.right); state.move(.right)               // onto switch (4,2)
+        XCTAssertTrue(state.fold())                          // echo [.right,.right]
+        let echo = state.echoes[0]
+
+        // Advance the fresh run to turn 1 and snapshot the derived world there.
+        XCTAssertTrue(state.move(.up))                       // (3,0) t1
+        XCTAssertEqual(state.turn, 1)
+        let heldAt1   = state.isSwitchHeld("s1")             // false (echo on (4,1))
+        let openAt1   = state.isDoorOpen(d1)                 // false
+        let hazardAt1 = state.position(of: h1)               // (0,1)
+        let echoAt1   = state.position(of: echo)             // (4,1)
+        XCTAssertFalse(heldAt1)
+        XCTAssertFalse(openAt1)
+        XCTAssertEqual(hazardAt1, GridCoordinate(row: 0, column: 1))
+        XCTAssertEqual(echoAt1, GridCoordinate(row: 4, column: 1))
+
+        // Advance to turn 2: the derived world genuinely changes.
+        XCTAssertTrue(state.move(.up))                       // (2,0) t2
+        XCTAssertEqual(state.turn, 2)
+        XCTAssertTrue(state.isSwitchHeld("s1"))              // echo now on the switch
+        XCTAssertTrue(state.isDoorOpen(d1))
+        XCTAssertEqual(state.position(of: h1), GridCoordinate(row: 0, column: 0))
+        XCTAssertEqual(state.position(of: echo), GridCoordinate(row: 4, column: 2))
+
+        // Step back to turn 1: every derived value returns to its turn-1 reading.
+        XCTAssertTrue(state.stepBack())
+        XCTAssertEqual(state.turn, 1)
+        XCTAssertEqual(state.player, GridCoordinate(row: 3, column: 0))
+        XCTAssertEqual(state.isSwitchHeld("s1"), heldAt1)
+        XCTAssertEqual(state.isDoorOpen(d1), openAt1)
+        XCTAssertEqual(state.position(of: h1), hazardAt1)
+        XCTAssertEqual(state.position(of: echo), echoAt1)
+        XCTAssertEqual(state.echoes.count, 1)                // echo untouched by step-back
+    }
+
+    // MARK: - Reset run (Phase 1.07)
+
+    /// Reset run is the existing `restartRun()` op exposed to a control (D-029):
+    /// player→start, turn→0, current run cleared, win flag cleared, and **all banked
+    /// echoes preserved** — distinct from `clearEchoes()`, which wipes them. It works
+    /// mid-run and equally after a win.
+    func testResetRunPreservesEchoesAndClearsRunIncludingAfterWin() {
+        // Mid-run reset: keeps both echoes, returns to a clean turn-0 run.
+        let state = GameState()
+        state.move(.up); state.move(.up); state.fold()       // echo A [.up,.up]
+        state.move(.down); state.fold()                      // echo B [.down]
+        XCTAssertEqual(state.echoes.count, 2)
+        state.move(.right); state.move(.right)               // partial new run, clear of echoes
+        XCTAssertEqual(state.turn, 2)
+        XCTAssertFalse(state.currentRun.isEmpty)
+
+        state.restartRun()                                   // the reset-run op
+        XCTAssertEqual(state.player, state.start)
+        XCTAssertEqual(state.turn, 0)
+        XCTAssertTrue(state.currentRun.isEmpty)
+        XCTAssertFalse(state.hasWon)
+        XCTAssertEqual(state.echoes.count, 2)                // echoes preserved (unlike clearEchoes)
+
+        // Reset after a win also works: it clears `hasWon` and still keeps echoes.
+        let won = GameState(width: 3, height: 3,
+                            start: GridCoordinate(row: 0, column: 0),
+                            exit: GridCoordinate(row: 0, column: 2), echoBudget: 2)
+        won.move(.down); won.fold()                          // bank an echo
+        XCTAssertEqual(won.echoes.count, 1)
+        won.move(.right); won.move(.right)                   // reach the exit → win
+        XCTAssertTrue(won.hasWon)
+
+        won.restartRun()
+        XCTAssertFalse(won.hasWon)
+        XCTAssertEqual(won.player, won.start)
+        XCTAssertEqual(won.turn, 0)
+        XCTAssertTrue(won.currentRun.isEmpty)
+        XCTAssertEqual(won.echoes.count, 1)                  // echo survives the reset
+    }
 }

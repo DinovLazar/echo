@@ -220,6 +220,47 @@
 - **Consequences:** The budget is a single model guard, unit-tested, with the UI free to reflect it (the debug bar shows `echoes M / budget B`). **Honest downside:** none of note.
 - **Links:** Plan §14 (point 1); Phase 1.06 completion report §3; `ECHO/Models/GameState.swift` (`fold`); D-015.
 
+### D-028 · 2026-06-25 · Step-back as deterministic positional rollback, not a snapshot stack
+- **Status:** Accepted
+- **Context:** Step back must undo one move and leave the whole board (echoes, hazards, switches, doors) consistent with the earlier turn.
+- **Decision:** Implement `stepBack()` by popping the last move from `currentRun`, decrementing `turn`, and recomputing `player` by replaying `currentRun` from `start`. Everything else (echoes/hazards/switches/doors) recomputes for free because it is already derived from `turn` + positions.
+- **Alternatives considered:** A snapshot stack of full game state per turn — rejected: O(1) undo, but it must capture every mutable field correctly and risks silent drift from the recorded run, the single source of truth. Storing inverse moves — rejected: redundant with `currentRun`, more state to keep in sync.
+- **Consequences:** A cheap recompute on each undo (trivial on a small grid / short run); keeps the project's "model rule, not a stored snapshot" discipline; impossible to diverge from `currentRun`.
+- **Links:** Phase 1.07; relies on the `turn == currentRun.count` invariant; D-022/D-023 (derived collision/win).
+- **Note (numbering):** This phase's brief supplied these five entries as D-027…D-031, but D-027 was already taken (echo budget, shipped in 1.06). Per the never-reuse-IDs convention they were appended as **D-028…D-032** and their internal cross-references renumbered to match; content is otherwise the brief's verbatim text. (See Phase 1.07 completion report §3.)
+
+### D-029 · 2026-06-25 · Reset run = the existing restartRun() op exposed to a control
+- **Status:** Accepted
+- **Context:** The spec's "reset run" scraps the current attempt but keeps banked echoes — which is exactly what the death restart already does.
+- **Decision:** Reset run triggers the existing `restartRun()` (player→start, turn→0, `currentRun` cleared, `hasWon` cleared, folded echoes preserved). No new behavior; an optional thin `resetRun()` wrapper may alias it for readability.
+- **Alternatives considered:** A distinct reset that also clears echoes — rejected: that is `clearEchoes()` (debug-only); the spec requires echoes to persist on reset. A confirmation dialog before reset — rejected: reset is meant to be cheap and instant, matching the calm, blame-free tone.
+- **Consequences:** Trivial implementation; one canonical restart path shared by death and manual reset (less to test, no divergence). Minor: an accidental tap discards the in-progress run, but echoes survive and re-walking is cheap.
+- **Links:** Phase 1.07; D-030 (step-back never removes echoes either).
+
+### D-030 · 2026-06-25 · Step-back is intra-run only; it never un-folds an echo
+- **Status:** Accepted
+- **Context:** Step back could, in principle, keep going past turn 0 and pop the last banked echo.
+- **Decision:** `stepBack()` operates only on the current run and is a no-op at turn 0; it never removes a folded echo. Removing/"un-folding" an echo, if ever wanted, is a separate explicit control (not built this phase).
+- **Alternatives considered:** Let step-back cross the fold boundary and pop the most recent echo — rejected: conflates two distinct operations and makes the undo semantics ambiguous ("am I undoing a move or a self?").
+- **Consequences:** Clean mental model — step-back tunes the current run, reset restarts it, neither touches banked echoes. Downside: there is no quick way to drop the last echo yet; deferred as a possible future control.
+- **Links:** Phase 1.07; D-029.
+
+### D-031 · 2026-06-25 · Step-back refused while won; reset run allowed always
+- **Status:** Accepted
+- **Context:** Once `hasWon` is set, input is locked. Should step-back bypass that lock?
+- **Decision:** `stepBack()` is refused while `hasWon` (symmetry with `move(_:)`); reset run is always allowed (it is a full restart and clears `hasWon`).
+- **Alternatives considered:** Allow step-back after a win — rejected: partially "un-winning" a solved room is surprising; once solved, the natural paths are advance (Next) or reset.
+- **Consequences:** Predictable end-of-room behavior. Minor downside: you cannot nudge back one tile to inspect the winning position; immaterial in grey-box.
+- **Links:** Phase 1.07; D-023 (collision-before-win / input lock).
+
+### D-032 · 2026-06-25 · No redo (step-forward) in 1.07
+- **Status:** Accepted
+- **Context:** Step back invites a symmetric "redo" of an undone move.
+- **Decision:** Ship step-back only; no redo this phase. The spec (Plan §14) lists only "step back — undo a single move."
+- **Alternatives considered:** Add redo now — rejected: not in the spec, and it needs a second history pointer and extra state; easy to add later if it proves wanted in play.
+- **Consequences:** Undo is one-directional; re-doing a move means re-issuing it (cheap on a small grid). Documented so it reads as deliberate, not an oversight.
+- **Links:** Phase 1.07.
+
 ---
 
 ### Decision-log conventions

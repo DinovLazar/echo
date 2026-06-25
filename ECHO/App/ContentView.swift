@@ -66,16 +66,25 @@ struct ContentView: View {
     // MARK: - Debug bar (TEMPORARY — remove in Parts 2–3)
 
     /// Throwaway development controls, intentionally kept out of `BoardView` so the
-    /// board stays "just the board" and this strip is trivial to delete later.
-    /// *Fold* banks the current run as an echo and rewinds; *Clear* wipes the room
-    /// to pristine (a debug stand-in — the real "reset run" is Phase 1.07, not
-    /// this); *Next* loads the next proof room. The readout shows the shared turn
-    /// counter and the live echo count against the room's budget, plus a "Solved ✓"
-    /// stand-in once the exit is reached (the real win overlay is Part 3). It sits
-    /// below the board, clear of the swipe/tap area, so it never intercepts input.
+    /// board stays "just the board" and this strip is trivial to delete later. The
+    /// real in-room control layout and feel are Part 2/Part 3; these are grey-box.
+    ///
+    /// *Fold* banks the current run as an echo and rewinds. *Step back* (Phase 1.07)
+    /// undoes one committed move of the current run (disabled at turn 0, where it is
+    /// a no-op anyway). *Reset run* (Phase 1.07) scraps the current attempt but
+    /// **keeps banked echoes** — the `restartRun()` op the death restart uses. *Clear*
+    /// wipes the room to pristine, **echoes and all** — a debug-only convenience,
+    /// deliberately distinct from *Reset run*. *Next* loads the next proof room. The
+    /// readout shows the shared turn counter and the live echo count against the
+    /// room's budget, plus a "Solved ✓" stand-in once the exit is reached (the real
+    /// win overlay is Part 3). It sits below the board, clear of the swipe/tap area,
+    /// so it never intercepts input.
     private var debugBar: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             Button("Fold") { state.fold() }
+            Button("Step back") { state.stepBack() }
+                .disabled(state.turn == 0)
+            Button("Reset run") { state.restartRun() }
             Button("Clear") { state.clearEchoes() }
             Button("Next") { loadNextRoom() }
             Spacer()
