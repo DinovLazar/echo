@@ -457,4 +457,265 @@ final class ECHOTests: XCTestCase {
         let up = GridCoordinate(row: a.row - 1, column: a.column)  // (2,3)
         XCTAssertFalse(state.playerCollides(previousPlayerCell: a, newPlayerCell: up, turn: 2))
     }
+
+    // MARK: - Walls (Phase 1.06)
+
+    /// A move into a wall cell is a no-op, exactly like off-grid: no tick, no
+    /// record, no collision; an open direction still commits.
+    func testWallBlocksPlayerMovement() {
+        let state = GameState(width: 3, height: 3,
+                              start: GridCoordinate(row: 1, column: 1),
+                              walls: [GridCoordinate(row: 0, column: 1)])
+        XCTAssertFalse(state.move(.up))                         // into the wall above
+        XCTAssertEqual(state.player, GridCoordinate(row: 1, column: 1))
+        XCTAssertEqual(state.turn, 0)
+        XCTAssertTrue(state.currentRun.isEmpty)
+        XCTAssertTrue(state.move(.down))                        // open direction commits
+        XCTAssertEqual(state.player, GridCoordinate(row: 2, column: 1))
+        XCTAssertEqual(state.turn, 1)
+    }
+
+    // MARK: - Switches & doors (Phase 1.06)
+
+    /// Switch held-state and door open-state are pure per-turn derivations from
+    /// occupancy: with no one on the switch the door is closed and its cell blocks
+    /// movement; walking the player onto the switch opens it.
+    func testSwitchHeldAndDoorOpenDerivedFromOccupancy() {
+        let theSwitch = Switch(id: "s1", cell: GridCoordinate(row: 0, column: 0))
+        let door = Door(id: "d1", cells: [GridCoordinate(row: 0, column: 2)], heldBy: ["s1"])
+        let state = GameState(width: 3, height: 3,
+                              start: GridCoordinate(row: 2, column: 0),
+                              switches: [theSwitch], doors: [door])
+        XCTAssertFalse(state.isSwitchHeld("s1"))
+        XCTAssertFalse(state.isDoorOpen(door))
+        XCTAssertTrue(state.isClosedDoor(GridCoordinate(row: 0, column: 2)))
+
+        state.move(.up)                                          // (1,0)
+        state.move(.up)                                          // (0,0) == switch
+        XCTAssertTrue(state.isSwitchHeld("s1"))                  // player holds it
+        XCTAssertTrue(state.isDoorOpen(door))
+        XCTAssertFalse(state.isClosedDoor(GridCoordinate(row: 0, column: 2)))
+    }
+
+    /// The canonical solve: fold an echo onto a switch so it holds a door open
+    /// while present-you walks through it to the exit. Also proves the negative —
+    /// without the echo, the closed door blocks the only path.
+    func testEchoHoldsSwitchToOpenDoorCanonicalSolve() {
+        let s1 = Switch(id: "s1", cell: GridCoordinate(row: 2, column: 2))
+        let d1 = Door(id: "d1", cells: [GridCoordinate(row: 0, column: 1)], heldBy: ["s1"])
+        func makeRoom() -> GameState {
+            GameState(width: 3, height: 3,
+                      start: GridCoordinate(row: 2, column: 0),
+                      exit: GridCoordinate(row: 0, column: 2),
+                      echoBudget: 1, switches: [s1], doors: [d1])
+        }
+
+        // Solo: the door is closed, so stepping into it is a no-op and there is no win.
+        let solo = makeRoom()
+        XCTAssertTrue(solo.move(.up))                            // (1,0)
+        XCTAssertTrue(solo.move(.up))                            // (0,0)
+        XCTAssertFalse(solo.move(.right))                        // into closed door (0,1)
+        XCTAssertEqual(solo.player, GridCoordinate(row: 0, column: 0))
+        XCTAssertFalse(solo.hasWon)
+
+        // With an echo holding the switch, present-you passes the now-open door.
+        let state = makeRoom()
+        state.move(.right); state.move(.right)                   // onto the switch (2,2)
+        XCTAssertTrue(state.fold())                              // echo stands on (2,2) for t ≥ 2
+        XCTAssertTrue(state.move(.up))                           // (1,0) t1
+        XCTAssertTrue(state.move(.up))                           // (0,0) t2 → switch held by echo
+        XCTAssertTrue(state.isDoorOpen(d1))
+        XCTAssertTrue(state.move(.right))                        // through the open door (0,1) t3
+        XCTAssertTrue(state.move(.right))                        // (0,2) exit t4
+        XCTAssertTrue(state.hasWon)
+        XCTAssertEqual(state.player, GridCoordinate(row: 0, column: 2))
+    }
+
+    // MARK: - Hazards (Phase 1.06)
+
+    /// Land-on: the player steps onto a hazard's current-turn cell → dissolve and
+    /// restart.
+    func testHazardLandOnKillsPlayer() {
+        let hazard = Hazard(id: "h1", start: GridCoordinate(row: 0, column: 2),
+                            path: [.left, .right], loops: true)
+        let state = GameState(width: 3, height: 3,
+                              start: GridCoordinate(row: 0, column: 0), hazards: [hazard])
+        XCTAssertEqual(hazard.position(at: 1), GridCoordinate(row: 0, column: 1))
+        state.move(.right)                                       // both on (0,1) at turn 1
+        XCTAssertEqual(state.player, state.start)
+        XCTAssertEqual(state.turn, 0)
+        XCTAssertTrue(state.currentRun.isEmpty)
+    }
+
+    /// Cross-paths (swap), now **live** against a hazard (D-022): the player and a
+    /// hazard trade the same adjacent pair on the same turn. This isolates the swap
+    /// branch — the hazard's turn-1 tile is the player's *old* cell, not its new
+    /// one, so land-on does not fire.
+    func testHazardCrossPathsSwapKillsPlayer() {
+        let hazard = Hazard(id: "h1", start: GridCoordinate(row: 0, column: 1),
+                            path: [.left, .right], loops: true)
+        let state = GameState(width: 3, height: 3,
+                              start: GridCoordinate(row: 0, column: 0), hazards: [hazard])
+        XCTAssertEqual(hazard.position(at: 0), GridCoordinate(row: 0, column: 1))
+        XCTAssertEqual(hazard.position(at: 1), GridCoordinate(row: 0, column: 0))   // not a land-on
+        state.move(.right)                                       // P (0,0)→(0,1) while H (0,1)→(0,0)
+        XCTAssertEqual(state.player, state.start)                // swap death → restart
+        XCTAssertEqual(state.turn, 0)
+    }
+
+    /// Hazard motion model: `loops:true` repeats (indexing modulo path length);
+    /// `loops:false` stands still on the last tile once exhausted; an empty path is
+    /// stationary.
+    func testHazardLoopsNonLoopAndStationary() {
+        let loop = Hazard(id: "l", start: GridCoordinate(row: 0, column: 0),
+                          path: [.right, .left], loops: true)
+        XCTAssertEqual(loop.position(at: 0), GridCoordinate(row: 0, column: 0))
+        XCTAssertEqual(loop.position(at: 1), GridCoordinate(row: 0, column: 1))
+        XCTAssertEqual(loop.position(at: 2), GridCoordinate(row: 0, column: 0))
+        XCTAssertEqual(loop.position(at: 3), GridCoordinate(row: 0, column: 1))     // repeats
+        XCTAssertEqual(loop.position(at: 100), GridCoordinate(row: 0, column: 0))
+
+        let once = Hazard(id: "o", start: GridCoordinate(row: 0, column: 0),
+                          path: [.right, .right], loops: false)
+        XCTAssertEqual(once.position(at: 1), GridCoordinate(row: 0, column: 1))
+        XCTAssertEqual(once.position(at: 2), GridCoordinate(row: 0, column: 2))
+        XCTAssertEqual(once.position(at: 3), GridCoordinate(row: 0, column: 2))     // exhausted, stands still
+        XCTAssertEqual(once.position(at: 50), GridCoordinate(row: 0, column: 2))
+
+        let still = Hazard(id: "s", start: GridCoordinate(row: 1, column: 1), path: [], loops: true)
+        XCTAssertEqual(still.position(at: 0), GridCoordinate(row: 1, column: 1))
+        XCTAssertEqual(still.position(at: 9), GridCoordinate(row: 1, column: 1))    // empty path
+    }
+
+    // MARK: - Win detection (Phase 1.06)
+
+    /// Reaching the exit alive sets the win flag and locks input (move and fold).
+    func testReachingExitAliveSetsWinAndLocksInput() {
+        let state = GameState(width: 3, height: 3,
+                              start: GridCoordinate(row: 0, column: 0),
+                              exit: GridCoordinate(row: 0, column: 2))
+        XCTAssertFalse(state.hasWon)
+        XCTAssertTrue(state.move(.right))                       // (0,1)
+        XCTAssertFalse(state.hasWon)
+        XCTAssertTrue(state.move(.right))                       // (0,2) == exit
+        XCTAssertTrue(state.hasWon)
+        XCTAssertFalse(state.move(.down))                       // input locked
+        XCTAssertEqual(state.player, GridCoordinate(row: 0, column: 2))
+        XCTAssertEqual(state.turn, 2)
+        XCTAssertFalse(state.fold())                           // fold locked too
+    }
+
+    /// Collision is evaluated before win on the same step: a tile that is both exit
+    /// and lethal is a death, not a win. A hazard sits on the exit the turn the
+    /// player arrives (a hazard, not an echo, because recording an echo onto the
+    /// exit would itself win).
+    func testCollisionTakesPrecedenceOverWin() {
+        let hazard = Hazard(id: "h1", start: GridCoordinate(row: 2, column: 2),
+                            path: [.up, .up, .down, .down], loops: true)   // (0,2) at turn 2
+        let state = GameState(width: 3, height: 3,
+                              start: GridCoordinate(row: 0, column: 0),
+                              exit: GridCoordinate(row: 0, column: 2), hazards: [hazard])
+        XCTAssertEqual(hazard.position(at: 2), GridCoordinate(row: 0, column: 2))
+        state.move(.right)                                      // (0,1) t1 — hazard (1,2), safe
+        XCTAssertFalse(state.hasWon)
+        state.move(.right)                                      // (0,2)=exit t2 — hazard there too
+        XCTAssertFalse(state.hasWon)                            // death took precedence
+        XCTAssertEqual(state.player, state.start)
+        XCTAssertEqual(state.turn, 0)
+    }
+
+    // MARK: - Echo budget (Phase 1.06)
+
+    /// `fold()` is refused once `echoes.count` reaches `echoBudget`; a refused fold
+    /// neither banks an echo nor rewinds the run. Budget 0 refuses the first fold.
+    func testFoldRefusedAtEchoBudget() {
+        let state = GameState(width: 5, height: 5,
+                              start: GridCoordinate(row: 4, column: 0), echoBudget: 1)
+        state.move(.up)
+        XCTAssertTrue(state.fold())                            // 0 < 1 → ok
+        XCTAssertEqual(state.echoes.count, 1)
+        state.move(.right)
+        XCTAssertFalse(state.fold())                           // 1 >= 1 → refused
+        XCTAssertEqual(state.echoes.count, 1)
+        XCTAssertEqual(state.currentRun, [.right])             // run kept, not consumed
+        XCTAssertEqual(state.turn, 1)                          // no rewind
+
+        let zero = GameState(width: 3, height: 3, echoBudget: 0)
+        zero.move(.up)
+        XCTAssertFalse(zero.fold())
+        XCTAssertTrue(zero.echoes.isEmpty)
+    }
+
+    // MARK: - Level data (Phase 1.06)
+
+    /// The locked v1 JSON format decodes into the model; absent `loops` defaults to
+    /// `true` and absent element arrays default to empty.
+    func testLevelJSONDecodesToModel() throws {
+        let json = """
+        {
+          "id": "t-decode", "name": "Decode Test",
+          "width": 7, "height": 7,
+          "start": { "row": 6, "column": 0 },
+          "exit":  { "row": 0, "column": 6 },
+          "echoBudget": 2,
+          "walls": [ { "row": 3, "column": 2 }, { "row": 3, "column": 4 } ],
+          "switches": [ { "id": "s1", "cell": { "row": 6, "column": 6 } } ],
+          "doors": [ { "id": "d1", "cells": [ { "row": 3, "column": 3 } ], "heldBy": ["s1"] } ],
+          "hazards": [ { "id": "h1", "start": { "row": 0, "column": 0 },
+                        "path": ["right","right","down"], "loops": true } ]
+        }
+        """
+        let level = try JSONDecoder().decode(Level.self, from: Data(json.utf8))
+        XCTAssertEqual(level.id, "t-decode")
+        XCTAssertEqual(level.width, 7)
+        XCTAssertEqual(level.start, GridCoordinate(row: 6, column: 0))
+        XCTAssertEqual(level.exit, GridCoordinate(row: 0, column: 6))
+        XCTAssertEqual(level.echoBudget, 2)
+        XCTAssertEqual(level.walls.count, 2)
+        XCTAssertEqual(level.switches.first?.cell, GridCoordinate(row: 6, column: 6))
+        XCTAssertEqual(level.doors.first?.cells, [GridCoordinate(row: 3, column: 3)])
+        XCTAssertEqual(level.doors.first?.heldBy, ["s1"])
+        XCTAssertEqual(level.hazards.first?.path, [.right, .right, .down])
+        XCTAssertEqual(level.hazards.first?.loops, true)
+
+        let sparse = """
+        { "id": "x", "name": "x", "width": 3, "height": 3,
+          "start": {"row":0,"column":0}, "exit": {"row":2,"column":2}, "echoBudget": 0,
+          "hazards": [ { "id": "h", "start": {"row":0,"column":0}, "path": ["right"] } ] }
+        """
+        let s2 = try JSONDecoder().decode(Level.self, from: Data(sparse.utf8))
+        XCTAssertEqual(s2.hazards.first?.loops, true)           // defaulted
+        XCTAssertTrue(s2.walls.isEmpty)                        // defaulted
+        XCTAssertTrue(s2.switches.isEmpty)
+        XCTAssertTrue(s2.doors.isEmpty)
+    }
+
+    /// Building a `GameState` from a `Level` carries every field and resets play:
+    /// player→start, turn 0, empty run/echoes, win flag false.
+    func testGameStateLoadsFromLevelAndResets() {
+        let level = Level(id: "L", name: "L", width: 5, height: 4,
+                          start: GridCoordinate(row: 3, column: 0),
+                          exit: GridCoordinate(row: 0, column: 4),
+                          echoBudget: 2,
+                          walls: [GridCoordinate(row: 1, column: 1)],
+                          switches: [Switch(id: "s", cell: GridCoordinate(row: 3, column: 4))],
+                          doors: [Door(id: "d", cells: [GridCoordinate(row: 0, column: 2)], heldBy: ["s"])],
+                          hazards: [Hazard(id: "h", start: GridCoordinate(row: 0, column: 0),
+                                           path: [.down], loops: true)])
+        let state = GameState(level: level)
+        XCTAssertEqual(state.width, 5)
+        XCTAssertEqual(state.height, 4)
+        XCTAssertEqual(state.start, GridCoordinate(row: 3, column: 0))
+        XCTAssertEqual(state.player, GridCoordinate(row: 3, column: 0))
+        XCTAssertEqual(state.exit, GridCoordinate(row: 0, column: 4))
+        XCTAssertEqual(state.echoBudget, 2)
+        XCTAssertTrue(state.isWall(GridCoordinate(row: 1, column: 1)))
+        XCTAssertEqual(state.switches.count, 1)
+        XCTAssertEqual(state.doors.count, 1)
+        XCTAssertEqual(state.hazards.count, 1)
+        XCTAssertEqual(state.turn, 0)
+        XCTAssertTrue(state.currentRun.isEmpty)
+        XCTAssertTrue(state.echoes.isEmpty)
+        XCTAssertFalse(state.hasWon)
+    }
 }

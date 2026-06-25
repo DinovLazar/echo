@@ -8,9 +8,15 @@
 //  cell into a move). Diagonals and multi-step moves are deliberately
 //  unrepresentable — the game has exactly one verb, and these are its directions.
 //
+//  Phase 1.06 gives it a `String` raw value and `Codable`: a hazard's authored
+//  patrol in a level JSON file is a list of these names (e.g. `["right","down"]`),
+//  and the raw values match the case names exactly, so a `[Direction]` decodes
+//  straight from that array with no custom logic.
+//
 
-/// One orthogonal step on the grid.
-nonisolated enum Direction: CaseIterable {
+/// One orthogonal step on the grid. The raw value is the lowercase name used in
+/// level JSON (`"up"`/`"down"`/`"left"`/`"right"`).
+nonisolated enum Direction: String, CaseIterable, Codable, Sendable {
     case up, down, left, right
 
     /// Row/column offset of one step in this direction, in top-left origin

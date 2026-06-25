@@ -148,6 +148,78 @@
 - **Consequences:** A defensive cross-paths clause that is currently unreachable against echoes — player and echoes share an origin and one-step-per-turn cadence, so they are always the same checkerboard parity at a given turn, while a swap requires opposite-parity adjacent tiles. So for echoes specifically this is behaviourally identical to land-on only today; the clause first becomes reachable with independently-moving hazards (Phase 1.06).
 - **Links:** Phase 1.05; Phase 1.06 (hazards); ECHO-Plan §14 point 4; relates to D-016 (which deferred collision to this phase).
 
+### D-019 · 2026-06-25 · Switches/doors are pure per-turn derivations; doors block (never kill); switches held by player/echoes only
+- **Status:** Accepted
+- **Context:** Phase 1.06 adds switches and doors. We had to decide whether held/open state is stored mutable state advanced each turn, or derived; what "open at turn N" means for the player's move; and whether hazards can hold switches.
+- **Decision:** Held/open state is **derived, not stored**. A switch is held at turn N iff the player or any echo occupies its cell at turn N; a door is open at turn N iff **every** switch in its `heldBy` is held (AND). The player may enter a door cell on the N→N+1 step only if the door is open at turn N — the **visible state before** the move; a closed door is a no-op block exactly like a wall. **Doors never kill.** Hazards do **not** hold switches. All derivations are evaluated at the current turn (the only turn the live engine and rendering ever ask about), reading `player`/`turn`/`echoes`.
+- **Alternatives considered:** (a) Store mutable held/open booleans and toggle them each turn — reintroduces the desync-prone per-turn bookkeeping the pure-position design (D-014) exists to avoid — rejected. (b) Evaluate door-open at turn N+1 (after the move) — would let the player walk into a door that closes under them and contradicts "visible state before the move" — rejected. (c) Let hazards hold switches — muddies the timing model and isn't wanted by any room — rejected.
+- **Consequences:** Door/switch logic is a handful of pure predicates with no cache to invalidate, trivially testable. **Honest downside:** the derivations are only correct *at the current turn* (the player's history isn't stored), which is fine because no live use ever needs another turn; documented on the methods so a future caller doesn't pass an arbitrary turn expecting a historical answer.
+- **Links:** Plan §14 (point 3); Phase 1.06 completion report §3; `ECHO/Models/GameState.swift` (`isSwitchHeld`/`isDoorOpen`/`isClosedDoor`); D-014, D-020.
+
+### D-020 · 2026-06-25 · Echoes and hazards replay verbatim, ignoring walls/doors; verbatim replay is the keystone, not special-cased
+- **Status:** Accepted
+- **Context:** With walls and doors in the world, a replaying echo or an authored hazard path could in principle point at a wall or a door that is closed under it on this run. We had to decide whether replay re-validates legality each turn.
+- **Decision:** Neither echoes nor hazards re-evaluate path legality during replay — each reproduces its recorded/authored path **verbatim**. Walls are static and authored paths are wall-legal, so walls never bite. Doors can differ between runs, but the **door nuance is handled by level design**: proof rooms are authored so no echo/hazard ever needs to traverse a tile that is a closed door under it (the canonical use is an echo standing on a switch while present-you walks the door tile). Verbatim replay is the keystone of the whole mechanic and is **not special-cased**.
+- **Alternatives considered:** (a) Re-clamp/re-validate each replayed step against walls and doors — breaks exact, repeatable replay (the same recording could diverge between runs), defeating the determinism the game is built on — rejected (this is alternative (c) deferred in D-014, now resolved as "don't"). (b) Make echoes/hazards solid against doors — adds collision math the engine deliberately avoids — rejected.
+- **Consequences:** Replay stays a pure function of (start, recording/path, turn) — exact and testable. **Honest downside:** correctness now partly depends on **authoring discipline**; a carelessly authored room could send an echo "through" a closed door visually. Accepted because authored rooms are small and reviewed, and the alternative compromises the core guarantee.
+- **Links:** Plan §14 (points 1–2); Phase 1.06 completion report §3; D-014 (alternative c), D-019.
+
+### D-021 · 2026-06-25 · Hazards loop their path by default; lethal on contact, not solid, don't hold switches
+- **Status:** Accepted
+- **Context:** Phase 1.06 introduces moving hazards. We had to define their motion past the end of the authored path, and exactly how they interact with the player and the world.
+- **Decision:** A hazard's `path` is applied one step per turn from its `start`. `loops` defaults to **`true`** (the patrol repeats, indexing the path modulo its length); `loops:false` makes it **stand still on its last tile** once exhausted (the same rule as an echo, D-014); an empty path is stationary. Hazards are **lethal to present-you on contact** (land-on OR cross-paths) but are **not solid** (you can step onto a hazard's tile — and die — they never block a move) and do **not** hold switches.
+- **Alternatives considered:** (a) Hazards stand still when exhausted (like echoes) by default — a patrol that stops after one sweep is rarely what a hazard wants; looping is the common case, so it is the default, with `loops:false` available — rejected as the default. (b) Make hazards solid (block movement) — turns them into moving walls and changes the puzzle from timing to pathing, and isn't the intended threat — rejected. (c) Let hazards hold switches — see D-019 — rejected.
+- **Consequences:** Hazards read as patrolling threats you time your crossing against; their position is a pure function like an echo's, so replay/tests stay deterministic. **Honest downside:** a looping hazard's position is O(turn) to compute (no `min` clamp like an echo), negligible for real rooms but worth memoising behind the same pure interface if turn counts ever grow large (mirrors D-014's note).
+- **Links:** Plan §14 (point 3); Phase 1.06 completion report §3; `ECHO/Models/Hazard.swift`; D-014, D-022.
+
+### D-022 · 2026-06-25 · Collision now evaluates echoes AND hazards; the cross-paths/swap branch goes live against hazards
+- **Status:** Accepted
+- **Context:** `playerCollides(...)` implemented land-on OR cross-paths since 1.05 (D-018), but the swap branch could never fire against echoes (parity-locked). Hazards move independently and can move opposite the player.
+- **Decision:** Collision evaluates **both** echoes and hazards with the same land-on/cross-paths predicate. Because a hazard can trade the same adjacent pair with the player on one step, the **cross-paths/swap branch (D-018) is now live** — covered by a dedicated test that isolates a swap (the hazard's turn-N tile is the player's *old* cell, so land-on does not fire).
+- **Alternatives considered:** Land-on only for hazards — would let a player "pass through" a hazard by swapping with it head-on, which is exactly the case the strict predicate exists to catch — rejected. Writing a second, hazard-specific predicate — needless duplication; the existing predicate generalises by construction — rejected.
+- **Consequences:** Past selves and hazards are both impassable in the strict sense; the defensive clause written in 1.05 is now exercised in real play. **Honest downside:** none of note — the predicate was designed for this; 1.06 just feeds it hazards.
+- **Links:** Phase 1.05; Phase 1.06 completion report §3; `ECHO/Models/GameState.swift` (`playerCollides`); D-018.
+
+### D-023 · 2026-06-25 · On a committed step, collision is evaluated before win; an exit-and-lethal tile is a death
+- **Status:** Accepted
+- **Context:** A single committed step can both reach the exit and touch an echo/hazard on the exit tile. We had to fix the order.
+- **Decision:** After a committed step, **collision is checked first**. If present-you died, the run restarts and there is no win. Only a survived step checks the exit. So a tile that is **both the exit and lethal is a death** — you must reach the exit *alive*.
+- **Alternatives considered:** Check win first (reaching the exit wins even if something is on it) — trivialises rooms where a hazard guards the exit and contradicts "reach the exit alive" — rejected.
+- **Consequences:** Exit-guarding hazards/echoes are meaningful; the rule is one ordering in `move(_:)`. **Honest downside:** none of note; it matches the spec's intent.
+- **Links:** Plan §14 (point 5); Phase 1.06 completion report §3; `ECHO/Models/GameState.swift` (`move`); D-022.
+
+### D-024 · 2026-06-25 · The v1 level JSON format is locked
+- **Status:** Accepted
+- **Context:** Rooms are authored as plain JSON (Plan §6/§7). We had to lock a schema before authoring so rooms don't drift field names.
+- **Decision:** Lock the v1 format: top-level `id`, `name`, `width`, `height`, `start`, `exit` (single), `echoBudget`, and the element arrays `walls`, `switches`, `doors`, `hazards`. Coordinates are `{ "row": R, "column": C }`, origin top-left, 0-indexed (a `GridCoordinate`). `switches` are `{ id, cell }`; `doors` are `{ id, cells[], heldBy[] }` where `heldBy` is an **AND-array** and `cells` is an array (so multi-tile / multi-switch doors need no format bump); `hazards` are `{ id, start, path[], loops }` where `path` is a `Direction` name list and `loops` defaults `true`. The element arrays may be omitted (decode to empty); the core fields are required.
+- **Alternatives considered:** (a) Multi-`exit` / non-id-based references now — unused by any planned room and adds surface to get wrong — rejected; deferred to a future format bump. (b) Require every array explicitly — noisier authoring with no safety gain since absence is unambiguous — rejected (absent = empty).
+- **Consequences:** Rooms are small, hand-editable, and stable to author against; the arrays future-proof multi-tile/multi-switch doors. **Honest downside:** a malformed room fails to decode and (per D-025's loader) falls back to a bare board rather than surfacing the error loudly in-app; acceptable for a solo dev who watches the room load.
+- **Links:** Plan §6/§7; Phase 1.06 completion report §2; `ECHO/Models/Level.swift`; D-025.
+
+### D-025 · 2026-06-25 · Levels live in repo-root `Levels/` and are bundled via a third file-system synchronized root group on the app target
+- **Status:** Accepted
+- **Context:** Plan §7 places room JSON in repo-root `Levels/` (not under `ECHO/`). The brief requires the JSON bundled into the app target and loadable at runtime, and says to surface any bundling obstacle rather than silently relocating the folder. The project uses file-system synchronized groups for `ECHO/` and `ECHOTests/`.
+- **Decision:** Keep the rooms in repo-root **`Levels/`** and add a **third `PBXFileSystemSynchronizedRootGroup` (`Levels`)** to the app target's `fileSystemSynchronizedGroups` — the same mechanism already used for the two source roots, so Xcode classifies the `.json` files as bundle resources automatically. The loader (`LevelLoader`) reads by id with `Bundle.main.url(forResource:withExtension:)` and falls back to a `Levels/` subdirectory lookup, so it works whether the bundling flattens (synchronized group) or nests (folder reference). The obsolete `Levels/.gitkeep` was removed (the folder now holds real files; outside `ECHO/`, so no D-012 collision).
+- **Alternatives considered:** (a) **Relocate `Levels/` under `ECHO/`** so the existing `ECHO` synchronized group bundles it — explicitly discouraged by the brief and contradicts Plan §7 — rejected. (b) Add the rooms as an explicit folder reference + `PBXBuildFile` in the Resources phase — more `.pbxproj` surface than the synchronized-group entry and a less faithful match to the project idiom — rejected. (c) A resource group with individual file references — most edits, most fragile to hand-author — rejected.
+- **Consequences:** Rooms stay where the docs say and bundle with a minimal, symmetric project-file edit. **Honest downside — unverified blind `.pbxproj` edit:** this environment has only Command Line Tools (no `xcodebuild`/Xcode), so the edit could **not** be build-verified here. It mirrors the existing synchronized-group entries exactly, but per D-012's "no blind `.pbxproj` edits we can't verify" caution it is flagged in the completion report for Lazar to confirm on first ⌘R that the JSON bundles and the loader finds it (if not, the in-app fallback shows a bare board rather than crashing).
+- **Links:** Plan §7; Phase 1.06 completion report §2/§7; `ECHO.xcodeproj/project.pbxproj`; `ECHO/Models/Level.swift` (`LevelLoader`); D-012 (synchronized groups / no blind edits), D-024.
+
+### D-026 · 2026-06-25 · Win is in-session only for 1.06 (a `GameState` flag); persistence and Level Select are deferred to Part 3
+- **Status:** Accepted
+- **Context:** 1.06 needs a win signal, but full menus, a real win overlay, and saving solved levels are later scope (Part 3).
+- **Decision:** Model the win as a `private(set) var hasWon` on `GameState`, set when present-you reaches the exit alive and cleared on reset/reload. It locks input (`move`/`fold` no-op) until the throwaway debug bar's *Next* loads the next room or *Clear* resets. **No UserDefaults persistence and no Level Select** — both deferred to Part 3.
+- **Alternatives considered:** Persist solved rooms now — out of scope and couples 1.06 to a save format not yet designed — rejected. A real win overlay now — that's Part 3 / 3.03 — rejected; the debug "Solved ✓ / Next" is a deliberate stand-in.
+- **Consequences:** A minimal, testable win with no storage. **Honest downside:** progress is lost on relaunch (no persistence) and "Next" just cycles a hardcoded list — both intended for this phase and tracked for Part 3.
+- **Links:** Plan §14 (point 5); Phase 1.06 completion report §3; `ECHO/Models/GameState.swift` (`hasWon`), `ECHO/App/ContentView.swift`; Part 3 (3.03 menus, persistence).
+
+### D-027 · 2026-06-25 · The echo budget is enforced at fold time (fold refused at the cap)
+- **Status:** Accepted
+- **Context:** Each room carries an `echoBudget` (max echoes). We had to decide where the cap is enforced.
+- **Decision:** Enforce it in `fold()`: a fold is refused (a no-op, returning `false`) when `echoes.count >= echoBudget`, alongside the existing empty-run and post-win guards. A refused fold neither banks an echo nor rewinds the run. The bare default board uses `echoBudget == .max` (uncapped) so non-level play and the existing fold tests are unaffected.
+- **Alternatives considered:** Enforce at the UI layer (disable the fold button at the cap) — leaves the model accepting over-budget folds and untestable in isolation — rejected; the cap is a game rule, so it lives in the model. Throw/return an error — heavier than the established `Bool` "did it happen" signal (D-015) — rejected.
+- **Consequences:** The budget is a single model guard, unit-tested, with the UI free to reflect it (the debug bar shows `echoes M / budget B`). **Honest downside:** none of note.
+- **Links:** Plan §14 (point 1); Phase 1.06 completion report §3; `ECHO/Models/GameState.swift` (`fold`); D-015.
+
 ---
 
 ### Decision-log conventions

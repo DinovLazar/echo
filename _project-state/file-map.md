@@ -32,21 +32,24 @@
 - `_project-state/completions/Part-1-Phase-03-Completion.md` — Phase 1.03 (Grid + Move) completion report
 - `_project-state/completions/Part-1-Phase-04-Completion.md` — Phase 1.04 (Fold — record & replay) completion report
 - `_project-state/completions/Part-1-Phase-05-Completion.md` — Phase 1.05 (Collision + restart) completion report
+- `_project-state/completions/Part-1-Phase-06-Completion.md` — Phase 1.06 (Room contents, level data & win) completion report
 
 ## Xcode project (`ECHO.xcodeproj/`)
-- `ECHO.xcodeproj/project.pbxproj` — the project definition (targets, build settings, synchronized groups)
+- `ECHO.xcodeproj/project.pbxproj` — the project definition (targets, build settings, synchronized groups: `ECHO`, `ECHOTests`, and `Levels` (room JSON bundled into the app target, D-025))
 - `ECHO.xcodeproj/project.xcworkspace/contents.xcworkspacedata` — implicit workspace pointer
 - `ECHO.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist` — workspace check defaults
 - `ECHO.xcodeproj/xcshareddata/xcschemes/ECHO.xcscheme` — shared build/run/test scheme (committed)
 
 ## App source (`ECHO/`)
 - `ECHO/App/ECHOApp.swift` — `@main` SwiftUI App entry point; hosts `ContentView`
-- `ECHO/App/ContentView.swift` — root view: full-bleed paper background; **owns the `GameState`** and lays out `BoardView` above a throwaway debug bar (Fold / Clear / `turn · echoes` readout, D-017)
-- `ECHO/Models/GameState.swift` — `@MainActor @Observable` board state: dimensions (param, default 7×7), stored `start` cell (default center), player cell, turn counter, current run (`[Direction]`) and echoes (`[Echo]`); `move(_:)` (one tile, clamp off-grid, +1 turn, records the move, then checks collision and restarts on a touch), `playerCollides(previousPlayerCell:newPlayerCell:turn:)` (pure collision predicate — land-on OR cross-paths, D-018), `restartRun()` (death restart / future reset-run: player→start, turn→0, run emptied, echoes kept), `fold()`, `clearEchoes()`, `position(of:)`. Pure, unit-tested (D-013, D-014, D-015, D-018)
+- `ECHO/App/ContentView.swift` — root view: full-bleed paper background; **owns the `GameState`** and the ordered proof-room id list + index; loads room 1 on launch (`LevelLoader`, bare-board fallback) and lays out `BoardView` above a throwaway debug bar (Fold / Clear / **Next** (cycle rooms) / `turn · echoes M/budget B` readout / **Solved ✓** stand-in, D-017/D-026)
+- `ECHO/Models/GameState.swift` — `@MainActor @Observable` board state: full room config as `let`s — dimensions, `start`, `exit: GridCoordinate?`, `echoBudget` (`.max` on bare board), `walls: Set`, `switches`, `doors`, `hazards` — plus player cell, turn counter, current run, echoes, and `hasWon`. Designated `init(...)` (all room fields defaulted) + `convenience init(level:)`. `move(_:)` (no-op on off-grid / wall / closed door / after win; commits → collision-first then win), `playerCollides(...)` (land-on OR cross-paths over **echoes + hazards**; swap live vs hazards, D-018/D-022), pure derivations `isWall`/`isCellHeld`/`isSwitchHeld`/`isDoorOpen`/`isClosedDoor` (D-019), `position(of: Echo)`/`position(of: Hazard)`, `fold()` (empty/budget/win guards, D-027), `restartRun()`/`clearEchoes()` (clear `hasWon`). Pure, unit-tested (D-013..D-027)
+- `ECHO/Models/Level.swift` — `nonisolated` Decodable room schema: `Level` (`id`/`name`/`width`/`height`/`start`/`exit`/`echoBudget` + `walls`/`switches`/`doors`/`hazards`; element arrays optional → empty), `Switch` (`id`,`cell`), `Door` (`id`,`cells[]`,`heldBy[]` AND-array), and `enum LevelLoader` (`load(_ id:in:) -> Level?`, flat + `Levels/`-subdir bundle lookup, nil on failure). The locked v1 format (D-024)
+- `ECHO/Models/Hazard.swift` — `nonisolated` Decodable value type for a moving lethal cell: `id`, `start`, `path: [Direction]`, `loops` (defaults true; absent path → empty); `position(at turn:)` applies one path step/turn (empty/turn-0 → start; `loops:false` stands still when exhausted; `loops:true` indexes modulo path length). Lethal on contact, not solid, doesn't hold switches (D-021)
 - `ECHO/Models/Echo.swift` — `nonisolated` value type for one folded run: stable `id: UUID` + recorded `moves: [Direction]`; `position(start:turn:)` is a pure function of start+moves+turn (exhausted echo stands still). `Identifiable`/`Equatable`/`Sendable` (D-014)
-- `ECHO/Models/GridCoordinate.swift` — `nonisolated` value type for a grid cell (`row`, `column`; origin top-left); `Equatable`/`Hashable`/`Sendable`
-- `ECHO/Models/Direction.swift` — `nonisolated` enum of the four orthogonal moves; `offset` (row/col delta) + `init?(from:to:)` adjacency rule used by tap input
-- `ECHO/Views/BoardView.swift` — the real board: grey lattice with per-cell tap targets + translucent grey echoes (drawn beneath; hit-testing off so taps reach the cell, a UI concern unrelated to game collision) + black rounded-square player on top; takes the `GameState` injected from `ContentView`; swipe (drag) and tap input route through `GameState.move(_:)`; placeholder `.easeInOut` slide doubles as the death snap-back (collision is a model rule, so a death just resets turn/player and the board reacts via Observation)
+- `ECHO/Models/GridCoordinate.swift` — `nonisolated` value type for a grid cell (`row`, `column`; origin top-left); `Equatable`/`Hashable`/`Sendable`/`Codable` (decodes a level-JSON `{row,column}`)
+- `ECHO/Models/Direction.swift` — `nonisolated` `String`-raw-value enum of the four orthogonal moves (`Codable`/`Sendable`; raw values match the JSON hazard-path names); `offset` (row/col delta) + `init?(from:to:)` adjacency rule used by tap input
+- `ECHO/Views/BoardView.swift` — the real board: grey lattice with per-cell tap targets + grey-box element layers (walls = solid dark cells; exit = hollow ring; door bars shown while closed; switch circles that fill when held; hazard = a hollow `Diamond` shape) + translucent grey echoes + black rounded-square player on top, all reading current-turn state from `GameState`; every drawn piece has hit-testing off so taps reach the lattice; swipe/tap route through `GameState.move(_:)`; placeholder `.easeInOut` slide doubles as the death snap-back / win reaction (all rules are in the model, the board reacts via Observation)
 - `ECHO/Audio/` — reserved: generative percussion, Part 2. **Not git-tracked while empty** (no `.gitkeep`, see D-012); reappears when populated
 - `ECHO/Haptics/` — reserved: Core Haptics mapping, Part 2. **Not git-tracked while empty** (no `.gitkeep`, see D-012); reappears when populated
 - `ECHO/Resources/Assets.xcassets/Contents.json` — asset catalog root
@@ -54,10 +57,13 @@
 - `ECHO/Resources/Assets.xcassets/AccentColor.colorset/Contents.json` — accent color (system default)
 
 ## Levels (`Levels/`)
-- `Levels/.gitkeep` — reserved for room JSON files (added from Phase 1.06; not yet wired into the build)
+- `Levels/p1-06-a.json` — proof room "Wall Maze" (walls only; `echoBudget` 1)
+- `Levels/p1-06-b.json` — proof room "Held Door" (switch + door; canonical echo-holds-switch solve; `echoBudget` 1)
+- `Levels/p1-06-c.json` — proof room "The Crossing" (patrolling hazard; timing crossing; `echoBudget` 2)
+- *(`Levels/.gitkeep` removed in 1.06 — the folder now holds real files; bundled into the app target via a synchronized root group, D-025)*
 
 ## Tests (`ECHOTests/`)
-- `ECHOTests/ECHOTests.swift` — `@MainActor` XCTest coverage of the move model (four directions, four edge no-ops, turn-counter rule, defaults, tap rule), the fold/replay suite (recording, fold→one echo + rewind, replay fidelity, exhausted-echo standstill, two independent echoes, different-length lockstep, empty-fold no-op, `clearEchoes()` pristine, no-op-not-recorded), **plus the collision/restart suite** (land-on via real play, turn-0 immunity post-fold + post-death/no-loop, fatal partial run discarded, exhausted-echo land-on, one-of-many-echoes single death, no-echoes regression, cross-paths clause at the predicate level). Three prior 1.04 replay/lock tests re-pathed to non-colliding walks now that retracing an echo is fatal (D-018)
+- `ECHOTests/ECHOTests.swift` — `@MainActor` XCTest coverage of the move model, the fold/replay suite, and the collision/restart suite (all 1.03–1.05), **plus the 1.06 suite**: wall block; switch/door held + open/closed and the echo-holds-switch canonical solve (with the solo-blocked negative); hazard land-on; hazard cross-paths/swap (live, D-022); hazard loop/non-loop/stationary; win detection + input lock; collision-before-win precedence (hazard on the exit); echo-budget refusal (incl. budget 0); JSON decode→model (+ defaults); level-load reset. No prior test needed re-pathing this phase (new room fields default to empty/uncapped)
 
 ## Reserved
 - `docs/design-handovers/.gitkeep` — reserved for Design-phase handover docs
