@@ -2,29 +2,32 @@
 //  BoardView.swift
 //  ECHO
 //
-//  Phase 1.03 (Grid + Move) → 1.04 (Fold) → 1.06 (Room contents). The real,
-//  state-driven board. It renders the placeholder grey lattice, the room's
-//  contents (walls, exit, doors, switches, hazards), any folded **echoes**, and a
-//  solid black rounded-square player on top, and routes both taps and swipes
-//  through the single `GameState.move(_:)` rule so the world advances one step at
-//  a time.
+//  Phase 1.03 (Grid + Move) → 1.04 (Fold) → 1.06 (Room contents) → 2.02 (The
+//  board's real look + motion). The state-driven board, now rendered to the locked
+//  Phase 2.01 visual design instead of grey boxes: real colours/geometry from the
+//  `Theme` token layer, in both Light and Invert palettes, with pieces that glide
+//  between cells instead of snapping.
 //
-//  The board no longer owns its state — `ContentView` holds the `GameState` and
-//  passes it in, so the throwaway debug bar there can drive fold/clear/next on the
-//  same model. The board stays "just the board": no buttons live here.
+//  Presentation only — the engine is untouched. `GameState` still owns every rule
+//  (turn order, collision, win, replay); this view animates how those state changes
+//  are *displayed*. Each committed step:
+//    • Player — a 120 ms `curve.standard` slide + a departure squash-and-stretch
+//      (94% along / 106% across) + a 40 ms soft-snap settle, and the board's only
+//      drop shadow (it must always read as the clearest, "most now" thing — §3).
+//    • Echoes — the same 120 ms `curve.standard` slide in lockstep, but flat: no
+//      squash, no shadow, smaller and translucent so they recede (§2.2 / §3).
+//    • Enemy/hazard — a heavier 140 ms `curve.standard` slide with a ~30 ms
+//      anticipation lean-in toward travel, no overshoot (§6e).
+//  A no-op move animates nothing; a death restart and a fold snap instantly (their
+//  full choreography — fizz, ripple, peel — is Phase 2.03). The slide/squash fire
+//  only for a real, survived step; resets are not wrapped in an animation, so they
+//  snap on the next frame (handover §6d restart = 0 ms).
 //
-//  Collision and win are turn-engine rules (Phases 1.05–1.06), not UI ones:
-//  touching an echo or hazard dissolves the player and restarts the run inside
-//  `GameState`, reaching the exit alive sets its win flag, and because the model is
-//  `@Observable` the board reacts for free. Switch/door open-state is read from the
-//  model per turn, so a door drawn here just reflects `state.isDoorOpen(_:)` at the
-//  current turn.
-//
-//  Visuals stay deliberately pre-design — legible grey boxes on paper, clearly
-//  distinct from each other and from the black player and translucent-grey echoes.
-//  The real monochrome palette/accent/invert mode is Phase 2.01 and the tuned
-//  motion is Phase 2.02. Hit testing is off on every drawn piece so a tap falls
-//  through to the cell beneath it (the lattice cells are the input layer).
+//  Glows and the player shadow render *outside* the cell and are never clipped (no
+//  `.clipped`/`.clipShape` anywhere here). Every drawn piece has hit testing off so
+//  a tap falls through to the lattice cell beneath it, which is the input layer.
+//  Grayscale identity is preserved: every element stays uniquely readable by shape +
+//  size + opacity with colour removed (§3); red/gold are a bonus layer only (D-041).
 //
 
 import SwiftUI
@@ -34,40 +37,29 @@ struct BoardView: View {
     /// re-renders this view when the state it reads changes).
     let state: GameState
 
-    // Placeholder look only — the real palette and motion land in Part 2.
-    /// Thin neutral-grey cell border (carries no design meaning yet).
-    private static let gridLine = Color(white: 0.7)
-    private static let lineWidth: CGFloat = 1
+    /// The active palette (Light by default; `ContentView` injects it). The single
+    /// switch point a later Settings phase (2.06) will bind to a user toggle.
+    @Environment(\.theme) private var theme
+
+    /// Bumped once per **survived** committed step. Drives the player's
+    /// squash-and-stretch and each hazard's anticipation lean-in (keyframe triggers),
+    /// so those transient effects fire only on a real step — never on a fold, a death
+    /// restart, a step-back to start, or a room load.
+    @State private var stepTick = 0
+    /// Whether the last survived step was horizontal — chooses the squash axis.
+    @State private var lastStepHorizontal = true
+
     /// Board occupies this fraction of the smaller available dimension, leaving a
-    /// margin from the safe-area edges (kept from the hello-grid).
+    /// margin from the safe-area edges.
     private static let fillFraction: CGFloat = 0.82
-    /// The player / echo squares fill most of their cell (the player's identity).
-    private static let playerFraction: CGFloat = 0.76
     /// Minimum drag distance that counts as a swipe rather than a tap.
     private static let swipeThreshold: CGFloat = 20
 
-    // Element placeholder palettes (all greyscale; meaning lives in shape + state,
-    // never colour — the real design is Phase 2.01).
-    /// Echo: a mid-grey translucent fill with a thin darker outline, beneath the player.
-    private static let echoFill = Color(white: 0.5).opacity(0.35)
-    private static let echoOutline = Color(white: 0.25).opacity(0.55)
-    /// Wall: a solid dark-grey cell (distinct from the pure-black player).
-    private static let wallFill = Color(white: 0.28)
-    /// Exit: a hollow ring outline.
-    private static let exitStroke = Color(white: 0.2)
-    /// Switch: a hollow circle that fills in when held.
-    private static let switchStroke = Color(white: 0.2)
-    /// Door bar (shown only while closed).
-    private static let doorFill = Color(white: 0.15)
-    /// Hazard: a hollow diamond, denser than an echo and a different shape.
-    private static let hazardFill = Color(white: 0.4).opacity(0.5)
-    private static let hazardOutline = Color(white: 0.12)
-
     var body: some View {
         GeometryReader { proxy in
-            // Square cells sized so the whole board fits within `fillFraction` of
-            // the smaller dimension. `max(width, height)` keeps cells square if a
-            // level loads a non-square board.
+            // Square cells sized so the whole board fits within `fillFraction` of the
+            // smaller dimension. `max(width, height)` keeps cells square for a
+            // non-square board.
             let available = min(proxy.size.width, proxy.size.height) * Self.fillFraction
             let cell = available / CGFloat(max(state.width, state.height))
             let boardSize = CGSize(width: cell * CGFloat(state.width),
@@ -84,7 +76,7 @@ struct BoardView: View {
                 playerSquare(cell: cell)
             }
             .frame(width: boardSize.width, height: boardSize.height)
-            // Center the board within the available (safe-area) space.
+            // Centre the board within the available (safe-area) space.
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .gesture(swipeGesture)
         }
@@ -92,18 +84,20 @@ struct BoardView: View {
 
     // MARK: - Pieces
 
-    /// The grey-box lattice. Each cell is independently tappable so a tap on a
-    /// cell orthogonally adjacent to the player can become a move. This is the
-    /// input layer; every other layer has hit testing off so taps reach it.
+    /// The grid lattice: quiet `tile.hairline` borders (handover §1b — the quietest
+    /// marks on screen). Each cell is independently tappable so a tap on a cell
+    /// orthogonally adjacent to the player can become a move. This is the input
+    /// layer; every other layer has hit testing off so taps reach it.
     private func lattice(cell: CGFloat) -> some View {
-        VStack(spacing: 0) {
+        let hairline = scaled(BoardMetrics.strokeHairline, cell: cell)
+        return VStack(spacing: 0) {
             ForEach(0..<state.height, id: \.self) { row in
                 HStack(spacing: 0) {
                     ForEach(0..<state.width, id: \.self) { column in
                         Rectangle()
                             .fill(Color.clear)
                             .frame(width: cell, height: cell)
-                            .border(Self.gridLine, width: Self.lineWidth)
+                            .border(theme.tileHairline, width: hairline)
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 tap(GridCoordinate(row: row, column: column))
@@ -114,116 +108,248 @@ struct BoardView: View {
         }
     }
 
-    /// Walls: a solid dark-grey square filling each impassable cell.
+    /// Walls: a full-cell rounded tile (1 pt inset so adjacent walls read separately)
+    /// with a top-light → bottom-dark gradient that gives just enough depth to read
+    /// as solid matter, not a drawn outline (§2.3).
     private func walls(cell: CGFloat) -> some View {
-        ForEach(Array(state.walls), id: \.self) { wall in
-            Rectangle()
-                .fill(Self.wallFill)
-                .frame(width: cell, height: cell)
+        let inset = scaled(BoardMetrics.wallInset, cell: cell)
+        let size = cell - inset * 2
+        let radius = scaled(BoardMetrics.radiusWall, cell: cell)
+        return ForEach(Array(state.walls), id: \.self) { wall in
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(LinearGradient(colors: [theme.wallTop, theme.wallBottom],
+                                     startPoint: .top, endPoint: .bottom))
+                .frame(width: size, height: size)
                 .position(center(of: wall, cell: cell))
                 .allowsHitTesting(false)
         }
     }
 
-    /// Exit: a hollow ring on the exit cell (drawn beneath everything that can sit
-    /// on it, so the player/echo/hazard read clearly on top).
+    /// Exit: a hollow ring (§2.7). In v1 every room has a single, always-active goal,
+    /// so the exit renders in its **active-goal** state — gold stroke + soft glow.
+    /// The **default** (not-yet-the-goal) state — an ink ring at 0.55, no glow — is
+    /// implemented alongside it (selected by `isActiveGoal`) so a later multi-exit /
+    /// locked-exit room can use it with no redesign.
     @ViewBuilder
     private func exitRing(cell: CGFloat) -> some View {
         if let exit = state.exit {
-            let size = cell * Self.playerFraction
+            let size = scaled(BoardMetrics.exitSize, cell: cell)
+            let stroke = scaled(BoardMetrics.strokeExitRing, cell: cell)
+            let isActiveGoal = true
             Circle()
-                .strokeBorder(Self.exitStroke, lineWidth: max(2, Self.lineWidth * 2))
+                .strokeBorder(isActiveGoal ? theme.goalGold
+                                           : theme.ink.opacity(BoardMetrics.exitDefaultRing),
+                              lineWidth: stroke)
                 .frame(width: size, height: size)
+                .accentGlow(isActiveGoal ? theme.goalGlow : .clear, cell: cell, enabled: isActiveGoal)
                 .position(center(of: exit, cell: cell))
                 .allowsHitTesting(false)
         }
     }
 
-    /// Doors: a thick bar drawn across each closed door cell; nothing when open
-    /// (the bar "retracts"). Open-state is read from the model at the current turn.
+    /// Doors: closed = one solid high-contrast bar across the cell (ink @ 0.92);
+    /// open = two short faint stubs at the bar's ends with an empty centre (ink @
+    /// 0.22). Solidity *and* completeness change, so the two read apart at a glance
+    /// (§2.5). Open-state is read from the model at the current turn.
     private func doorBars(cell: CGFloat) -> some View {
-        ForEach(state.doors) { door in
+        let thickness = scaled(BoardMetrics.doorThickness, cell: cell)
+        let stub = scaled(BoardMetrics.doorStub, cell: cell)
+        let radius = scaled(BoardMetrics.radiusDoorBar, cell: cell)
+        return ForEach(state.doors) { door in
             let open = state.isDoorOpen(door)
             ForEach(Array(door.cells.enumerated()), id: \.offset) { _, doorCell in
-                Rectangle()
-                    .fill(Self.doorFill)
-                    .frame(width: cell * 0.9, height: max(3, cell * 0.16))
-                    .position(center(of: doorCell, cell: cell))
-                    .opacity(open ? 0 : 1)
-                    .allowsHitTesting(false)
+                ZStack {
+                    if open {
+                        // Two recessed remnant stubs at the ends.
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(theme.ink.opacity(BoardMetrics.doorOpenRemnant))
+                            .frame(width: stub, height: thickness)
+                            .offset(x: -(cell - stub) / 2)
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(theme.ink.opacity(BoardMetrics.doorOpenRemnant))
+                            .frame(width: stub, height: thickness)
+                            .offset(x: (cell - stub) / 2)
+                    } else {
+                        // One solid bar spanning the cell.
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(theme.ink.opacity(BoardMetrics.doorClosedFill))
+                            .frame(width: cell, height: thickness)
+                    }
+                }
+                .frame(width: cell, height: thickness)
+                .position(center(of: doorCell, cell: cell))
+                .allowsHitTesting(false)
             }
         }
     }
 
-    /// Switches: a small hollow circle that fills in when held (player or echo on
-    /// its cell this turn).
+    /// Switches: **open** = a quiet hollow ring (§2.4); **held** (keeping the player
+    /// alive) = a filled gold circle + glow. The hollow-ring → filled-circle change
+    /// is the shape-change that carries the meaning; gold is the bonus layer (D-041).
     private func switchMarks(cell: CGFloat) -> some View {
-        let size = cell * 0.42
-        return ForEach(state.switches) { theSwitch in
+        ForEach(state.switches) { theSwitch in
             let held = state.isSwitchHeld(theSwitch.id)
-            Circle()
-                .strokeBorder(Self.switchStroke, lineWidth: max(2, Self.lineWidth * 2))
-                .background(Circle().fill(held ? Self.switchStroke : Color.clear))
-                .frame(width: size, height: size)
-                .position(center(of: theSwitch.cell, cell: cell))
-                .allowsHitTesting(false)
+            Group {
+                if held {
+                    let size = scaled(BoardMetrics.switchHeldSize, cell: cell)
+                    Circle()
+                        .fill(theme.goalGold)
+                        .frame(width: size, height: size)
+                        .accentGlow(theme.goalGlow, cell: cell)
+                } else {
+                    let size = scaled(BoardMetrics.switchOpenSize, cell: cell)
+                    Circle()
+                        .strokeBorder(theme.switchRing,
+                                      lineWidth: scaled(BoardMetrics.strokeSwitchRing, cell: cell))
+                        .frame(width: size, height: size)
+                }
+            }
+            .position(center(of: theSwitch.cell, cell: cell))
+            .allowsHitTesting(false)
         }
     }
 
-    /// The folded echoes: one translucent grey rounded square per echo, each at
-    /// its current cell and sliding between turns just like the player. Drawn
-    /// *beneath* the player and hazards (the black square always reads clearest)
-    /// and with hit testing off so a tap falls straight through to the cell
-    /// beneath. Touching one is fatal — but that is a turn-engine rule in
-    /// `GameState`, not a property of this view.
+    /// The folded echoes: a smaller, translucent rounded square per echo (§2.2),
+    /// flat — no squash, no shadow. Each slides between its replayed cells on the
+    /// same 120 ms `curve.standard` as the player (the slide comes from the
+    /// `withAnimation` wrapping a committed move, so echoes glide in lockstep and a
+    /// reset snaps). Drawn beneath the player and hit testing off.
     private func echoes(cell: CGFloat) -> some View {
-        let size = cell * Self.playerFraction
+        let size = scaled(BoardMetrics.echoSize, cell: cell)
+        let radius = scaled(BoardMetrics.radiusEcho, cell: cell)
+        let stroke = scaled(BoardMetrics.strokeEcho, cell: cell)
         return ForEach(state.echoes) { echo in
             let position = state.position(of: echo)
-            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
-                .fill(Self.echoFill)
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(theme.echoBase.opacity(theme.echoFillOpacity))
                 .overlay(
-                    RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
-                        .strokeBorder(Self.echoOutline, lineWidth: Self.lineWidth)
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(theme.echoBase.opacity(theme.echoStrokeOpacity),
+                                      lineWidth: stroke)
                 )
                 .frame(width: size, height: size)
                 .position(center(of: position, cell: cell))
-                .animation(.easeInOut, value: position)
                 .allowsHitTesting(false)
         }
     }
 
-    /// Hazards: a hollow diamond (a different shape from the rounded-square echo so
-    /// the two never blur together), at the hazard's current cell, sliding between
-    /// turns. Lethal on contact — again, a `GameState` rule, not a view property.
+    /// Hazards: a red diamond — the only diamond on the board — with a darker
+    /// outline, a focused inner core, and a soft contained glow (§2.6). The diamond
+    /// is a rounded square rotated 45° (corner radius 3 pt → "slightly sharp"); the
+    /// squash/anticipation and slide are applied in board axes on the whole piece, so
+    /// the inner rotation never skews them. Each hazard slides on the heavier 140 ms
+    /// `curve.standard` with a ~30 ms anticipation lean-in toward travel, no overshoot.
     private func hazardMarks(cell: CGFloat) -> some View {
-        let size = cell * Self.playerFraction
-        return ForEach(state.hazards) { hazard in
-            let position = state.position(of: hazard)
-            Diamond()
-                .fill(Self.hazardFill)
-                .overlay(Diamond().stroke(Self.hazardOutline, lineWidth: max(2, Self.lineWidth * 2)))
-                .frame(width: size, height: size)
-                .position(center(of: position, cell: cell))
-                .animation(.easeInOut, value: position)
+        ForEach(state.hazards) { hazard in
+            let current = hazard.position(at: state.turn)
+            let previous = hazard.position(at: max(0, state.turn - 1))
+            let moved = current != previous
+            let horizontal = current.column != previous.column
+            enemyDiamond(cell: cell)
+                // Anticipation: a short squash toward travel before it sets off,
+                // settling with no overshoot (§6e). Fires only when it actually moved.
+                .keyframeAnimator(initialValue: Squash(), trigger: stepTick) { view, squash in
+                    let s = moved ? squash : Squash()
+                    view.scaleEffect(x: horizontal ? s.along : s.across,
+                                     y: horizontal ? s.across : s.along)
+                } keyframes: { _ in
+                    KeyframeTrack(\.along) {
+                        CubicKeyframe(0.92, duration: 0.030)
+                        CubicKeyframe(1.0, duration: 0.110)
+                    }
+                    KeyframeTrack(\.across) {
+                        CubicKeyframe(1.08, duration: 0.030)
+                        CubicKeyframe(1.0, duration: 0.110)
+                    }
+                }
+                .position(center(of: current, cell: cell))
+                // Retime the lockstep slide from the player's 120 ms to the enemy's
+                // 140 ms — but only when there is an animation (a committed step);
+                // resets carry no animation and stay instant.
+                .transaction { t in
+                    if t.animation != nil { t.animation = Motion.enemyStep }
+                }
                 .allowsHitTesting(false)
         }
     }
 
-    /// The player: a solid black rounded square filling most of its cell, centered
-    /// on its current cell. It slides on a committed move (a plain default ease —
-    /// the tuned curve is Phase 2.02).
+    /// One enemy diamond: outer red diamond (outline) + inner core, built from two
+    /// rotated rounded squares so the small corner radius reads as "slightly sharp,"
+    /// with the contained glow around the silhouette.
+    private func enemyDiamond(cell: CGFloat) -> some View {
+        let size = scaled(BoardMetrics.enemySize, cell: cell)           // point-to-point
+        let side = size / sqrt(2)                                       // square side → p2p = size
+        let coreSide = scaled(BoardMetrics.enemyCoreSize, cell: cell) / sqrt(2)
+        let radius = scaled(BoardMetrics.radiusEnemyCorner, cell: cell)
+        let outline = scaled(BoardMetrics.strokeEnemyOutline, cell: cell)
+        return ZStack {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(theme.dangerRed)
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(theme.dangerOutline, lineWidth: outline)
+                )
+                .frame(width: side, height: side)
+                .rotationEffect(.degrees(45))
+            RoundedRectangle(cornerRadius: radius * 0.6, style: .continuous)
+                .fill(theme.dangerCore)
+                .frame(width: coreSide, height: coreSide)
+                .rotationEffect(.degrees(45))
+        }
+        .frame(width: size, height: size)
+        .accentGlow(theme.dangerGlow, cell: cell)
+    }
+
+    /// The player — "you, now": the largest element (32 pt vs the echo's 28 pt),
+    /// fully opaque ink, and the only shadow-caster, so it always reads as the
+    /// clearest thing on the board (§2.1 / §3). On a survived step it slides 120 ms
+    /// `curve.standard` (driven by `withAnimation` at the call site) with a departure
+    /// squash-and-stretch and a soft-snap settle layered on as a keyframe scale.
     private func playerSquare(cell: CGFloat) -> some View {
-        let size = cell * Self.playerFraction
-        return RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
-            .fill(Color.black)
+        let size = scaled(BoardMetrics.playerSize, cell: cell)
+        let radius = scaled(BoardMetrics.radiusPlayer, cell: cell)
+        // Capture the squash axis as a local so the keyframe closure references a
+        // value, not the main-actor `@State` property (keeps the closure isolation-clean).
+        let horizontal = lastStepHorizontal
+        return RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(theme.ink)
             .frame(width: size, height: size)
+            // Departure squash (94% along / 106% across by ~40 ms, back to 100% by
+            // arrival) + a ~6% soft-snap overshoot settle in the 40 ms tail (§6b).
+            // Realised as a keyframe scale so the position slide stays on the clean
+            // 120 ms `curve.standard`; fires only on a survived step.
+            .keyframeAnimator(initialValue: Squash(), trigger: stepTick) { view, squash in
+                view.scaleEffect(x: horizontal ? squash.along : squash.across,
+                                 y: horizontal ? squash.across : squash.along)
+            } keyframes: { _ in
+                KeyframeTrack(\.along) {
+                    CubicKeyframe(0.94, duration: 0.040)   // squash along travel
+                    CubicKeyframe(1.0, duration: 0.080)    // back to 100% by ~120 ms (arrival)
+                    CubicKeyframe(1.06, duration: 0.020)   // soft-snap overshoot
+                    CubicKeyframe(1.0, duration: 0.020)    // settle (~160 ms total)
+                }
+                KeyframeTrack(\.across) {
+                    CubicKeyframe(1.06, duration: 0.040)   // stretch across travel
+                    CubicKeyframe(1.0, duration: 0.080)
+                    CubicKeyframe(1.06, duration: 0.020)   // uniform 6% overshoot with `along`
+                    CubicKeyframe(1.0, duration: 0.020)
+                }
+            }
+            .shadow(color: theme.shadowColor,
+                    radius: scaled(BoardMetrics.shadowBlur, cell: cell),
+                    x: 0,
+                    y: scaled(BoardMetrics.shadowOffsetY, cell: cell))
             .position(center(of: state.player, cell: cell))
-            .animation(.easeInOut, value: state.player)
             .allowsHitTesting(false)
     }
 
     // MARK: - Geometry
+
+    /// Scale a handover §1b point value (stated at the reference cell `C = 44 pt`) to
+    /// the runtime cell size, so every proportion holds on any device.
+    private func scaled(_ points: CGFloat, cell: CGFloat) -> CGFloat {
+        points / BoardMetrics.referenceCell * cell
+    }
 
     /// Pixel center of a grid cell, for `.position(_:)`.
     private func center(of coordinate: GridCoordinate, cell: CGFloat) -> CGPoint {
@@ -233,11 +359,11 @@ struct BoardView: View {
 
     // MARK: - Input
 
-    /// A tap on a cell orthogonally adjacent to the player steps into it; any
-    /// other cell (diagonal, non-adjacent, or the player's own) does nothing.
+    /// A tap on a cell orthogonally adjacent to the player steps into it; any other
+    /// cell (diagonal, non-adjacent, or the player's own) does nothing.
     private func tap(_ cell: GridCoordinate) {
         guard let direction = Direction(from: state.player, to: cell) else { return }
-        state.move(direction)
+        commitMove(direction)
     }
 
     /// A swipe whose dominant axis picks the direction → one step that way.
@@ -245,12 +371,12 @@ struct BoardView: View {
         DragGesture(minimumDistance: Self.swipeThreshold)
             .onEnded { value in
                 guard let direction = swipeDirection(value.translation) else { return }
-                state.move(direction)
+                commitMove(direction)
             }
     }
 
-    /// Maps a drag translation to a cardinal direction by its dominant axis
-    /// (top-left origin: a negative height is upward, a negative width is left).
+    /// Maps a drag translation to a cardinal direction by its dominant axis (top-left
+    /// origin: a negative height is upward, a negative width is left).
     private func swipeDirection(_ translation: CGSize) -> Direction? {
         if translation == .zero { return nil }
         if abs(translation.width) >= abs(translation.height) {
@@ -259,22 +385,80 @@ struct BoardView: View {
             return translation.height < 0 ? .up : .down
         }
     }
-}
 
-/// A diamond (rotated-square) outline used as the hazard placeholder — a distinct
-/// silhouette from the rounded-square player/echo. Pure shape, no design meaning.
-private struct Diamond: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
-        path.closeSubpath()
-        return path
+    /// Run one move through the engine and choose how to *display* it. The engine is
+    /// the sole authority on what happens; this only decides slide-vs-snap and fires
+    /// the squash. The model's own public predicates are read (no mutation) to
+    /// predict the outcome **before** committing, because the animation choice has to
+    /// wrap the mutation:
+    ///   • A no-op (off-grid / wall / closed door / after a win) → nothing moves.
+    ///   • A survived step → wrap the commit in `withAnimation(.step)` so the player
+    ///     and every echo/hazard glide in lockstep, and bump `stepTick` so the
+    ///     squash/anticipation fire.
+    ///   • A fatal step → commit **without** animation, so the instant restart snaps
+    ///     the board back to start on the next frame (handover §6d restart = 0 ms;
+    ///     the fizz/vignette is Phase 2.03).
+    /// If the prediction ever disagreed with the engine it would only mis-pick the
+    /// animation, never the outcome — the engine still decides the move.
+    private func commitMove(_ direction: Direction) {
+        guard !state.hasWon else { return }
+        let target = GridCoordinate(row: state.player.row + direction.offset.row,
+                                    column: state.player.column + direction.offset.column)
+        // Same guards as `GameState.move(_:)` — a refused move animates nothing.
+        guard state.contains(target),
+              !state.isWall(target),
+              !state.isClosedDoor(target) else { return }
+
+        let fatal = state.playerCollides(previousPlayerCell: state.player,
+                                         newPlayerCell: target,
+                                         turn: state.turn + 1)
+        if fatal {
+            state.move(direction)   // restarts the run — snap, no animation
+        } else {
+            lastStepHorizontal = (direction == .left || direction == .right)
+            stepTick &+= 1
+            withAnimation(Motion.step) {
+                _ = state.move(direction)
+            }
+        }
     }
 }
 
-#Preview {
+/// The per-axis scale used by the squash-and-stretch / anticipation keyframes:
+/// `along` the travel axis, `across` it. Resting value is `(1, 1)`; the keyframe
+/// tracks perturb it for ~160 ms (player) / ~140 ms (enemy) and return to rest.
+private struct Squash {
+    var along: CGFloat = 1
+    var across: CGFloat = 1
+}
+
+private extension View {
+    /// The handover's `glow.accent` (blur 8, spread 2 around the shape) approximated
+    /// with two stacked colour shadows — a soft halo that renders *outside* the shape
+    /// and is never clipped. `enabled == false` (or a `.clear` colour) draws nothing,
+    /// so a non-glowing state pays no cost.
+    @ViewBuilder
+    func accentGlow(_ color: Color, cell: CGFloat, enabled: Bool = true) -> some View {
+        if enabled {
+            let blur = BoardMetrics.glowBlur / BoardMetrics.referenceCell * cell
+            let spread = BoardMetrics.glowSpread / BoardMetrics.referenceCell * cell
+            self
+                .shadow(color: color, radius: blur)
+                .shadow(color: color, radius: spread)   // a touch more bloom ≈ the "spread"
+        } else {
+            self
+        }
+    }
+}
+
+#Preview("Light") {
     BoardView(state: GameState())
+        .environment(\.theme, .light)
+        .background(Color(hex: 0xF5EDDD))
+}
+
+#Preview("Invert") {
+    BoardView(state: GameState())
+        .environment(\.theme, .invert)
+        .background(Color(hex: 0x141210))
 }

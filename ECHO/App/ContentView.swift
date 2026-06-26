@@ -2,23 +2,24 @@
 //  ContentView.swift
 //  ECHO
 //
-//  Root view. Fills the whole screen with the warm off-white "paper" background
-//  described in the Plan (§5/§14) and composes the state-driven board on top.
-//  It owns the `GameState` and, from Phase 1.08, the ordered list of the ten
-//  teaching-room ids: it loads room 1 on launch and the throwaway debug bar's *Next*
-//  cycles through the rooms by building a fresh `GameState` from each level.
-//  The monochrome/accent/invert design system and the tuned feel arrive in
-//  Part 2; this stays "grey boxes on paper" by design.
+//  Root view. Fills the whole screen with the warm "paper" background — now the
+//  real Phase 2.01 vertical gradient (paper.top → paper.bottom) from the `Theme`
+//  token layer — and composes the state-driven board on top. It owns the
+//  `GameState` and, from Phase 1.08, the ordered list of the ten teaching-room ids:
+//  it loads room 1 on launch and the throwaway debug bar's *Next* cycles through the
+//  rooms by building a fresh `GameState` from each level.
+//
+//  Phase 2.02 wires the colour-token system in: this view owns the active
+//  `ThemeMode` (the **single internal switch point** 2.06 will bind to a real,
+//  persisted user toggle) and injects the resolved palette into the environment so
+//  `BoardView` reads it. There is no Settings UI or persistence this phase; the
+//  debug bar's *Invert* button just flips the seam in place so both palettes can be
+//  verified on device — it is a throwaway debug control, not the real setting.
 //
 
 import SwiftUI
 
 struct ContentView: View {
-    // Warm off-white "paper" — the canvas the game is drawn on. This is a
-    // deliberately minimal placeholder; the full palette and invert mode live in
-    // a later design phase. Defined inline so the app has zero dependencies.
-    private static let paper = Color(red: 0.96, green: 0.94, blue: 0.89)
-
     /// The ten teaching rooms, in order. `Next` cycles through these (Phase 1.08),
     /// replacing the three throwaway proof rooms. The real Level Select is Part 3
     /// (D-037) — this is still a throwaway debug cycle with no saved progress.
@@ -36,10 +37,20 @@ struct ContentView: View {
     /// crashes on a missing/broken level).
     @State private var state = ContentView.makeState(forRoomAt: 0)
 
+    /// The active palette mode — **the one internal switch point** a later Settings
+    /// phase (2.06) will replace with a binding to a persisted user preference.
+    /// Defaults to Light; the throwaway debug *Invert* button flips it.
+    @State private var themeMode: ThemeMode = .light
+
+    /// The resolved palette for this mode. Owned here (not read from the environment)
+    /// because this view is what *provides* the environment value to its children.
+    private var theme: Theme { Theme.make(themeMode) }
+
     var body: some View {
         ZStack {
             // Paper stays full-bleed (under the notch and home indicator)...
-            Self.paper
+            LinearGradient(colors: [theme.paperTop, theme.paperBottom],
+                           startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
             // ...while the board + debug bar sit within the safe area.
             VStack(spacing: 0) {
@@ -47,6 +58,8 @@ struct ContentView: View {
                 debugBar
             }
         }
+        .environment(\.theme, theme)
+        .tint(theme.ink)
     }
 
     // MARK: - Room loading
@@ -78,8 +91,10 @@ struct ContentView: View {
     /// a no-op anyway). *Reset run* (Phase 1.07) scraps the current attempt but
     /// **keeps banked echoes** — the `restartRun()` op the death restart uses. *Clear*
     /// wipes the room to pristine, **echoes and all** — a debug-only convenience,
-    /// deliberately distinct from *Reset run*. *Next* loads the next teaching room. The
-    /// readout shows the shared turn counter and the live echo count against the
+    /// deliberately distinct from *Reset run*. *Next* loads the next teaching room.
+    /// *Invert* flips the palette (Phase 2.02) so both Light and Invert can be checked
+    /// on device — a throwaway debug control, **not** the real Settings toggle (2.06).
+    /// The readout shows the shared turn counter and the live echo count against the
     /// room's budget, plus a "Solved ✓" stand-in once the exit is reached (the real
     /// win overlay is Part 3). It sits below the board, clear of the swipe/tap area,
     /// so it never intercepts input.
@@ -91,14 +106,18 @@ struct ContentView: View {
             Button("Reset run") { state.restartRun() }
             Button("Clear") { state.clearEchoes() }
             Button("Next") { loadNextRoom() }
+            Button(themeMode == .light ? "Invert" : "Light") {
+                themeMode = (themeMode == .light) ? .invert : .light
+            }
             Spacer()
             if state.hasWon {
                 Text("Solved ✓").fontWeight(.semibold)
             }
             Text("turn \(state.turn) · echoes \(state.echoes.count)/\(budgetText)")
                 .font(.footnote.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.textGuidance)
         }
+        .font(.footnote)
         .padding(.horizontal, 24)
         .padding(.vertical, 12)
     }
