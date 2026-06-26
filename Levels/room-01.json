@@ -1,0 +1,13 @@
+{
+  "id": "room-01",
+  "name": "Straight Line",
+  "width": 5,
+  "height": 3,
+  "start": { "row": 1, "column": 0 },
+  "exit":  { "row": 1, "column": 4 },
+  "echoBudget": 0,
+  "walls": [],
+  "switches": [],
+  "doors": [],
+  "hazards": []
+}

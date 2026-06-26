@@ -8,7 +8,7 @@
 //  (D-025). The v1 JSON format is locked (D-024):
 //
 //      {
-//        "id": "p1-06-b", "name": "Held Door",
+//        "id": "example", "name": "Schema Example",
 //        "width": 7, "height": 7,
 //        "start": { "row": 6, "column": 0 },
 //        "exit":  { "row": 0, "column": 6 },

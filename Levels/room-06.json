@@ -1,0 +1,17 @@
+{
+  "id": "room-06",
+  "name": "The Patrol",
+  "width": 5,
+  "height": 2,
+  "start": { "row": 1, "column": 0 },
+  "exit":  { "row": 1, "column": 4 },
+  "echoBudget": 0,
+  "walls": [],
+  "switches": [],
+  "doors": [],
+  "hazards": [
+    { "id": "h1", "start": { "row": 0, "column": 1 },
+      "path": ["right","right","right","down","left","left","left","up"],
+      "loops": true }
+  ]
+}

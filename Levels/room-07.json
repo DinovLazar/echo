@@ -1,0 +1,24 @@
+{
+  "id": "room-07",
+  "name": "Hold, Then Time",
+  "width": 5,
+  "height": 3,
+  "start": { "row": 1, "column": 0 },
+  "exit":  { "row": 1, "column": 4 },
+  "echoBudget": 1,
+  "walls": [
+    { "row": 0, "column": 3 }, { "row": 0, "column": 4 },
+    { "row": 2, "column": 0 }, { "row": 2, "column": 3 }, { "row": 2, "column": 4 }
+  ],
+  "switches": [
+    { "id": "s1", "cell": { "row": 0, "column": 0 } }
+  ],
+  "doors": [
+    { "id": "d1", "cells": [ { "row": 1, "column": 3 } ], "heldBy": ["s1"] }
+  ],
+  "hazards": [
+    { "id": "h1", "start": { "row": 2, "column": 1 },
+      "path": ["right","up","left","down"],
+      "loops": true }
+  ]
+}

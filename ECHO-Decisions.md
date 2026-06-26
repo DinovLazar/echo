@@ -261,6 +261,62 @@
 - **Consequences:** Undo is one-directional; re-doing a move means re-issuing it (cheap on a small grid). Documented so it reads as deliberate, not an oversight.
 - **Links:** Phase 1.07.
 
+### D-033 · 2026-06-26 · The first ten teaching rooms and their lesson arc
+- **Status:** Accepted
+- **Context:** Part 1 closes by turning the finished mechanics into a playable sequence; a new player needs to be taught move → walls → fold → echoes-are-lethal → two selves → patrols → combinations, one idea at a time.
+- **Decision:** Ship ten linear rooms, each isolating one new idea then combining: 01 move, 02 walls, 03 first fold, 04 echo-as-obstacle, 05 two selves, 06 patrol, 07 hold-then-time, 08 two jobs (with a switch dependency), 09 contested, 10 capstone. Budgets `0,0,1,1,2,0,1,2,2,2`. Every fold-room is unsolvable with doors closed, so folding is always genuinely required.
+- **Alternatives considered:** Fewer, looser rooms (faster to build, but teaches the concepts less cleanly); one open sandbox (no guided ramp, easy to bounce off).
+- **Consequences:** A fixed linear order with no jumping between rooms yet (no Level Select). The set is curated and small; expanding content is a later part.
+- **Links:** Phase 1.08; D-024 (locked room format); D-034, D-037.
+
+### D-034 · 2026-06-26 · Each teaching room ships with a solvability XCTest replaying a reference solution
+- **Status:** Accepted
+- **Context:** A room that cannot be solved within its budget, or that an encoding bug makes unsolvable, is worse than no room. The engine is deterministic, so a known-good solution can be replayed exactly.
+- **Decision:** Each room gets a per-room test that loads its JSON, replays a verified reference solution through the real `GameState` (deriving directions from coordinate paths), and asserts a win within budget; rooms 04/06/07 also assert a named naive run fails.
+- **Alternatives considered:** Manual playtesting only (not regression-safe, easy to break silently when the engine changes); one big test for all rooms (a single failure hides which room broke).
+- **Consequences:** Each test encodes **one** solution, not every solution; redesigning a room means updating its test. Tests assert solvability and budget, not uniqueness of the intended solution.
+- **Links:** Phase 1.08; D-033.
+
+### D-035 · 2026-06-26 · Rooms 09 and 10 are allowed to bite
+- **Status:** Accepted
+- **Context:** Part 1 should preview that the game gets genuinely hard, not just teach gently.
+- **Decision:** Rooms 09 and 10 run tight — narrow timing windows and every tile contested — while rooms 01–08 stay welcoming.
+- **Alternatives considered:** Keep all ten rooms gentle (smoother ramp, but no taste of the deep end before Part 1 ends).
+- **Consequences:** A deliberate difficulty spike at the end of Part 1, landing **before** the Part 2 juice/feedback work that will make hard rooms feel fairer; some players may stall on 09–10 for now.
+- **Links:** Phase 1.08; D-033.
+
+### D-036 · 2026-06-26 · Hazards are timed obstacles, not blockable by echoes
+- **Status:** Accepted
+- **Context:** It is tempting to design "park an echo to block the patrol" puzzles, but in this engine only the live player collides with echoes/hazards — an echo's body does not stop a hazard, and the two can overlap harmlessly.
+- **Decision:** All hazard rooms (06–10) teach **timing** — read the patrol and thread the gap — never blocking. Room geometry is authored so a held echo never needs to (and cannot) physically stop a hazard.
+- **Alternatives considered:** Pretend echoes can block hazards (false to the engine; would require a rule change and would teach a mechanic that does not exist).
+- **Consequences:** Future content authors must design hazard puzzles around timing/positioning, not blocking. No downside beyond stating the constraint plainly.
+- **Links:** Phase 1.08; D-018 (lockstep parity), D-020 (echoes/hazards ignore walls/doors).
+
+### D-037 · 2026-06-26 · Level Select, persistence, and a real win overlay deferred to Part 3
+- **Status:** Accepted
+- **Context:** The ten rooms are playable now via the existing debug controls; building selection/persistence/transition UI now would delay the content and overlap Part 3.
+- **Decision:** For Phase 1.08 the rooms ride the existing debug **Next** control in sequence. No room-picker, no saved progress, no win/transition overlay; these are Part 3.
+- **Alternatives considered:** Build a minimal Level Select and progress save now (useful, but premature and out of this phase's intent).
+- **Consequences:** No resume or jumping between rooms yet; losing app state restarts at room 01. Confirms and extends the earlier deferral of Level Select (D-026).
+- **Links:** Phase 1.08; D-026, D-033.
+
+### D-038 · 2026-06-26 · Door-open is read at the pre-step turn; Room 05's stall lengthened to match
+- **Status:** Accepted
+- **Context:** `GameState.move(_:)` reads a door's open-state **before** committing the step — `isClosedDoor(target)` runs while `turn`/`player` are still the pre-step values. So to walk through a switch-held door, the holding echo must already be on the switch at the turn the player is **adjacent** to the door, not at the turn it lands on it. The brief's Room 05 reference (stall `up,down`, then `down,down,down`) was calibrated to a post-step reading: the player reaches the door-A entry cell `(1,2)` at turn 2, but echo A only reaches switch A `(0,0)` at turn 3 — and `(1,2)` has odd `row+col`, so the player can occupy it only on **even** turns, which forces the door-A entry to turn 4. Replayed against the real engine, the brief's stall makes the door-A step a no-op (closed door) and the room never wins.
+- **Decision:** Keep Room 05's geometry exactly as specified (grid 5×5, walls, two switch→door pairs, budget 2); lengthen **only** the final-run stall from one up-down to two — `up,down,up,down` — so the player enters door A from `(1,2)` at pre-step turn 4 (≥3) with both echoes holding, then descends the centre through both doors. Verified to win in 7 turns within budget 2 against the real `GameState` (130/130 harness checks).
+- **Alternatives considered:** (a) Treat it as an encoding bug — rejected after re-checking the geometry and engine: the layout is right, the timing is the issue. (b) Move a switch/door by a cell — rejected: a stall lengthening is the smaller change and the brief's preferred lever ("adjust a stall"). (c) Approach door A from a side cell to dodge the parity constraint — rejected: it abandons the clean "straight down the centre" finish the lesson is built on.
+- **Consequences:** Room 05's lesson (two echoes hold two doors; descend the centre) and budget are unchanged; only the live finish gains one extra up-down (the JSON is byte-for-byte the brief's spec). Establishes the **pre-step** door rule as the timing model every future door/patrol room must be authored against.
+- **Links:** Phase 1.08; `ECHO/Models/GameState.swift` (`move`/`isClosedDoor`); D-019 (derived switch/door state), D-033, D-039.
+
+### D-039 · 2026-06-26 · Room 09 regrown 5×6 → 5×7 with a top stall pocket (original unsolvable under the pre-step door rule)
+- **Status:** Accepted
+- **Context:** Under the pre-step door rule (D-038), Room 09 exactly as specified (grid 5×6, start `(0,2)`, flanking switches `(0,1)`/`(0,3)` opening the entry neck `(1,2)`) is **unsolvable**: on the final live run both echoes occupy the two flanking switch cells at turn 1 (stepping onto either is a land-on death), the entry door below is closed at turn 0 (no echo on a switch yet), and up is off-grid — so the live player has **no legal, non-fatal first move**. This holds for *any* budget-2 solution, because the only routes to the two top-row switches pass through the two start-adjacent flank cells, which the echoes occupy at turn 1. Confirmed by replay against the real engine.
+- **Decision:** Grow the room one row at the top (5×7) and shift the whole layout down one row, adding a single empty **stall-pocket** cell `(0,2)` directly above the new start `(1,2)`, walled on both sides (`(0,0),(0,1),(0,3),(0,4)`). Everything else is the same room translated down: switches `(1,1)`/`(1,3)`, entry-neck door `(2,2)`, the two-row patrolled mid-room (rows 3–4), exit-neck door `(5,2)`, exit `(6,2)`, and the same patrol path shifted to start `(3,0)`. The forced opening move is now "up into the pocket, back down," after which the echoes are holding and the centre descent threads the perimeter sweep. Verified to win in 7 turns within budget 2 against the real `GameState`; still unsolvable with doors closed; still "bites" (one safe path, narrow patrol window).
+- **Alternatives considered:** (a) A single-cell tweak in 5×6 — rejected: no single wall/switch move frees a safe first move, since any echo holding a top-row flank switch occupies a start-adjacent cell at turn 1. (b) Move switch B deep and have echo B descend through door A (a dependency, like rooms 08/10) — rejected: it solves the stall but converts Room 09's identity into the rooms-08/10 dependency lesson. (c) Open the entry neck (remove door `(1,2)`) — rejected: deletes one of the two held necks the lesson is built on.
+- **Consequences:** Room 09 keeps its budget (2), its lesson (thread a patrolled centre while the sweep covers the perimeter; held neck in and held neck out; narrow window — D-035) and its overall shape, at the cost of one extra row and a forced opening stall. The brief's documented grid (5×6) and hazard start (`(2,0)`) are **superseded** by the shipped 5×7 / hazard start `(3,0)`; the per-room test and the hazard-trace test assert the shipped layout. Flagged prominently for the orchestrator in the Phase 1.08 completion report.
+- **Links:** Phase 1.08; D-038 (pre-step door rule); D-033, D-035; `ECHO/Models/GameState.swift` (`move`/`isClosedDoor`); `Levels/room-09.json`.
+
 ---
 
 ### Decision-log conventions

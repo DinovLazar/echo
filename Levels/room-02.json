@@ -1,0 +1,18 @@
+{
+  "id": "room-02",
+  "name": "The Turn",
+  "width": 5,
+  "height": 5,
+  "start": { "row": 4, "column": 0 },
+  "exit":  { "row": 0, "column": 4 },
+  "echoBudget": 0,
+  "walls": [
+    { "row": 0, "column": 0 }, { "row": 0, "column": 1 }, { "row": 0, "column": 2 }, { "row": 0, "column": 3 },
+    { "row": 1, "column": 0 }, { "row": 1, "column": 1 }, { "row": 1, "column": 2 }, { "row": 1, "column": 3 },
+    { "row": 2, "column": 0 }, { "row": 2, "column": 1 }, { "row": 2, "column": 2 }, { "row": 2, "column": 3 },
+    { "row": 3, "column": 0 }, { "row": 3, "column": 1 }, { "row": 3, "column": 2 }, { "row": 3, "column": 3 }
+  ],
+  "switches": [],
+  "doors": [],
+  "hazards": []
+}

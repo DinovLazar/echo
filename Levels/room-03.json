@@ -1,0 +1,20 @@
+{
+  "id": "room-03",
+  "name": "First Fold",
+  "width": 5,
+  "height": 3,
+  "start": { "row": 1, "column": 0 },
+  "exit":  { "row": 1, "column": 4 },
+  "echoBudget": 1,
+  "walls": [
+    { "row": 0, "column": 2 }, { "row": 0, "column": 3 }, { "row": 0, "column": 4 },
+    { "row": 2, "column": 0 }, { "row": 2, "column": 1 }, { "row": 2, "column": 2 }, { "row": 2, "column": 3 }, { "row": 2, "column": 4 }
+  ],
+  "switches": [
+    { "id": "s1", "cell": { "row": 0, "column": 0 } }
+  ],
+  "doors": [
+    { "id": "d1", "cells": [ { "row": 1, "column": 2 } ], "heldBy": ["s1"] }
+  ],
+  "hazards": []
+}

@@ -4,9 +4,9 @@
 //
 //  Root view. Fills the whole screen with the warm off-white "paper" background
 //  described in the Plan (§5/§14) and composes the state-driven board on top.
-//  It owns the `GameState` and, from Phase 1.06, the ordered list of proof-room
-//  ids: it loads room 1 on launch and the throwaway debug bar's *Next* cycles
-//  through the rooms by building a fresh `GameState` from each level.
+//  It owns the `GameState` and, from Phase 1.08, the ordered list of the ten
+//  teaching-room ids: it loads room 1 on launch and the throwaway debug bar's *Next*
+//  cycles through the rooms by building a fresh `GameState` from each level.
 //  The monochrome/accent/invert design system and the tuned feel arrive in
 //  Part 2; this stays "grey boxes on paper" by design.
 //
@@ -19,15 +19,19 @@ struct ContentView: View {
     // a later design phase. Defined inline so the app has zero dependencies.
     private static let paper = Color(red: 0.96, green: 0.94, blue: 0.89)
 
-    /// The proof rooms, in order. `Next` cycles through these (Phase 1.06). The
-    /// real Level Select is Part 3 — this is a throwaway debug cycle.
-    private static let roomIDs = ["p1-06-a", "p1-06-b", "p1-06-c"]
+    /// The ten teaching rooms, in order. `Next` cycles through these (Phase 1.08),
+    /// replacing the three throwaway proof rooms. The real Level Select is Part 3
+    /// (D-037) — this is still a throwaway debug cycle with no saved progress.
+    private static let roomIDs = [
+        "room-01", "room-02", "room-03", "room-04", "room-05",
+        "room-06", "room-07", "room-08", "room-09", "room-10",
+    ]
 
     /// Index of the room currently loaded into `state`.
     @State private var roomIndex = 0
 
     /// The single source of truth for the board, owned here so both the board and
-    /// the debug bar act on the same model. Loaded from the first proof room (with
+    /// the debug bar act on the same model. Loaded from the first teaching room (with
     /// a bare-board fallback if the resource can't be read, so the app never
     /// crashes on a missing/broken level).
     @State private var state = ContentView.makeState(forRoomAt: 0)
@@ -47,7 +51,7 @@ struct ContentView: View {
 
     // MARK: - Room loading
 
-    /// Build a `GameState` for the proof room at `index`, falling back to a bare
+    /// Build a `GameState` for the teaching room at `index`, falling back to a bare
     /// board if the level resource is missing or unreadable.
     private static func makeState(forRoomAt index: Int) -> GameState {
         let id = roomIDs[index % roomIDs.count]
@@ -57,7 +61,7 @@ struct ContentView: View {
         return GameState()
     }
 
-    /// Advance to the next proof room (wrapping), loading it fresh.
+    /// Advance to the next teaching room (wrapping), loading it fresh.
     private func loadNextRoom() {
         roomIndex = (roomIndex + 1) % Self.roomIDs.count
         state = Self.makeState(forRoomAt: roomIndex)
@@ -74,7 +78,7 @@ struct ContentView: View {
     /// a no-op anyway). *Reset run* (Phase 1.07) scraps the current attempt but
     /// **keeps banked echoes** — the `restartRun()` op the death restart uses. *Clear*
     /// wipes the room to pristine, **echoes and all** — a debug-only convenience,
-    /// deliberately distinct from *Reset run*. *Next* loads the next proof room. The
+    /// deliberately distinct from *Reset run*. *Next* loads the next teaching room. The
     /// readout shows the shared turn counter and the live echo count against the
     /// room's budget, plus a "Solved ✓" stand-in once the exit is reached (the real
     /// win overlay is Part 3). It sits below the board, clear of the swipe/tap area,
@@ -100,7 +104,7 @@ struct ContentView: View {
     }
 
     /// The echo budget as text — the number, or "∞" for the uncapped bare board
-    /// (the proof rooms always carry a real small cap).
+    /// (the teaching rooms always carry a real small cap).
     private var budgetText: String {
         state.echoBudget == .max ? "∞" : "\(state.echoBudget)"
     }
