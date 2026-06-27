@@ -39,7 +39,7 @@ Walking now sounds. Each step plays a soft, wooden percussive tick; the four dir
   - **Edited:** `ECHO/Views/BoardView.swift` (inject `audio`; fire `playStep`/`playSolve`/`playDeath`/`playFold` from the existing step/win/death/fold paths; derive the moving set read-only). `ECHO/App/ContentView.swift` (own `AudioManager`, `start()` it at launch, pass it to `BoardView`).
   - **Unchanged & verified untouched:** all of `ECHO/Models/*`, `Levels/*`, `ECHOTests/*`, `ECHO/Theme/*`, `ECHO/Views/BoardEffects.swift`, `ECHO/App/ECHOApp.swift`.
   - **Not committed:** the working-tree `DEVELOPMENT_TEAM = X74CK53A6Q` line in `ECHO.xcodeproj/project.pbxproj` (Xcode re-adds it locally; left unstaged).
-  - **Branch:** `phase-2.04-audio`, stacked on `phase-2.03-fold-death` (since `main` is still at Phase 1.07 `e891c43`). Commit hash + PR URL appended at commit time.
+  - **Branch:** `phase-2.04-audio`, stacked on `phase-2.03-fold-death` (since `main` is still at Phase 1.07 `e891c43`). **Commit `c036d03`** (state-doc commit-hash record follows). **PR:** https://github.com/DinovLazar/echo/pull/4 (into `main`; the diff also includes the stacked 2.02 + 2.03 commits — merge in order).
 - **Design:** implements the audio beats of `docs/design-handovers/Part-2-Phase-01-Handover.md` (§1c motion tokens; §6c fold / §6d death timelines). No new handover.
 - **Ops / manual:** none. No secrets. Repo stays asset-free (all sounds synthesized).
 
