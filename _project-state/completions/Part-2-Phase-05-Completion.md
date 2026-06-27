@@ -37,7 +37,7 @@ The phone now taps your hand in response to what you do: a light tick each time 
 - **Nothing in scope was cut.** The Settings UI / persistence of the toggle is correctly out of scope (Phase 2.06); the `isEnabled` switch is exposed as the binding point.
 
 ## 5. Changed files / deliverables
-- **Code (branch `phase-2.05-haptics`; commit hash recorded after commit):**
+- **Code (branch `phase-2.05-haptics`; feature commit `54332da`; PR [#5](https://github.com/DinovLazar/echo/pull/5) into `main`):**
   - **Added:** `ECHO/Haptics/HapticsManager.swift` (the feedback service; `ECHO/Haptics/` becomes git-tracked).
   - **Edited:** `ECHO/Models/GameState.swift` (additive `MoveOutcome` + `lastMoveOutcome`, set inside `move()`); `ECHO/Views/BoardView.swift` (inject `haptics`; fire `step()`/`win()`/`collision()`/`fold()` from the existing paths; both `#Preview`s updated); `ECHO/App/ContentView.swift` (own `HapticsManager`, pre-warm in `.task`, pass into `BoardView`); `ECHOTests/ECHOTests.swift` (six move-outcome tests).
   - **Unchanged & verified untouched as rules:** all other `ECHO/Models/*`, `Levels/*`, `RoomSolvabilityTests.swift`, `ECHO/Theme/*`, `ECHO/Audio/*`, `ECHO/Views/BoardEffects.swift`, `ECHO/App/ECHOApp.swift`.
