@@ -49,6 +49,14 @@ struct ContentView: View {
     /// sound-toggle (2.06) will use; no toggle UI or persistence is built this phase.
     @State private var audio = AudioManager()
 
+    /// The haptic-feedback manager (Phase 2.05), created here and pre-warmed at launch
+    /// so the first tap has no Taptic-Engine spin-up latency, then kept for the session.
+    /// Passed into `BoardView`, which fires its taps from the same step/fold/death
+    /// paths the audio and motion use. Its `isEnabled` switch is the binding point the
+    /// Settings haptics-toggle (2.06) will use; no toggle UI or persistence is built
+    /// this phase. A safe no-op on hardware without haptics and in the Simulator.
+    @State private var haptics = HapticsManager()
+
     /// The resolved palette for this mode. Owned here (not read from the environment)
     /// because this view is what *provides* the environment value to its children.
     private var theme: Theme { Theme.make(themeMode) }
@@ -61,15 +69,19 @@ struct ContentView: View {
                 .ignoresSafeArea()
             // ...while the board + debug bar sit within the safe area.
             VStack(spacing: 0) {
-                BoardView(state: state, audio: audio)
+                BoardView(state: state, audio: audio, haptics: haptics)
                 debugBar
             }
         }
         .environment(\.theme, theme)
         .tint(theme.ink)
-        // Pre-warm and start the audio engine at launch (idempotent; a no-op in
-        // previews). Kept running for the session so ticks fire with no latency.
-        .task { audio.start() }
+        // Pre-warm at launch (idempotent; no-ops in previews / where unsupported), so
+        // the first tick and the first tap fire with no spin-up latency. Both are kept
+        // for the session.
+        .task {
+            audio.start()
+            haptics.prepare()
+        }
     }
 
     // MARK: - Room loading

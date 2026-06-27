@@ -45,6 +45,16 @@
 
 import Observation
 
+/// The outcome of the most recent **committed** move, surfaced so a call site can
+/// pair feedback (sound, haptic) with what actually happened. A pure, additive,
+/// read-only signal (Phase 2.05) — it changes no rule. `nonisolated`/`Sendable` like
+/// the other model value types so it can be read from any context.
+nonisolated enum MoveOutcome: Equatable, Sendable {
+    case stepped   // a survived committed step (the turn ticked, the player lived)
+    case died      // a fatal step: touched an echo/hazard, the run restarted
+    case won       // a survived committed step that reached the exit
+}
+
 /// Observable model of the board: its size and contents, the player's cell, the
 /// shared turn counter, the live run, and the folded echoes. The world is
 /// turn-based and deterministic — it advances *only* when the player commits a
@@ -102,6 +112,16 @@ final class GameState {
     /// Set the instant present-you reaches the exit alive. While `true`, input is
     /// locked (`move`/`fold` are no-ops) until the room is reset or reloaded.
     private(set) var hasWon: Bool = false
+
+    /// The outcome of the most recent **committed** move — an additive, read-only
+    /// signal (Phase 2.05) so a call site can pair feedback with what happened. Set
+    /// **only** inside `move(_:)`: a survived step → `.stepped`, the exit step →
+    /// `.won`, the collision branch → `.died` (set before `restartRun()`, so it
+    /// survives the rewind and a consumer can still read "you just died"). A blocked /
+    /// no-op move leaves it **unchanged** — the call site treats `move()` returning
+    /// `false` as "nothing happened." `nil` until the first committed move. It changes
+    /// no rule: `restartRun`/`fold`/`stepBack`/`clearEchoes` never touch it.
+    private(set) var lastMoveOutcome: MoveOutcome?
 
     /// Designated initializer. Every room property has a default so the bare
     /// `GameState()` is still a plain centered 7×7 board with no contents, no exit,
@@ -254,13 +274,17 @@ final class GameState {
         if playerCollides(previousPlayerCell: previousPlayerCell,
                           newPlayerCell: player,
                           turn: turn) {
-            restartRun()
+            lastMoveOutcome = .died   // additive signal (Phase 2.05): set before the
+            restartRun()              // rewind, which never touches it, so it persists
             return true
         }
 
         // Then win: reaching the exit alive locks input.
         if let exit, player == exit {
             hasWon = true
+            lastMoveOutcome = .won
+        } else {
+            lastMoveOutcome = .stepped
         }
         return true
     }

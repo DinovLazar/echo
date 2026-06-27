@@ -50,6 +50,17 @@ struct BoardView: View {
     /// `isEnabled` switch. Passed in (not in the environment) for symmetry with `state`.
     let audio: AudioManager
 
+    /// The haptic-feedback manager, owned and pre-warmed by `ContentView` (Phase 2.05).
+    /// Fired from the same `commitMove`/`triggerFold` paths as the audio, so each tap
+    /// lands with its visible state change: step → slide, fold → §6c choreography,
+    /// collision → §6d dissolve, win → solve. The **step and fold** taps also coincide
+    /// with their sounds (both fired at commit); the **collision and win** taps fire at
+    /// the instant of contact/commit, a beat *before* their sounds — those sounds are
+    /// deliberately offset by the audio layer (to the §6d fizz / to arrival), and a
+    /// system `UIFeedbackGenerator` tap can't be host-time scheduled, so the tap leads.
+    /// Presentation-only; gated by its own `isEnabled` switch; passed in for symmetry.
+    let haptics: HapticsManager
+
     /// The active palette (Light by default; `ContentView` injects it). The single
     /// switch point a later Settings phase (2.06) will bind to a user toggle.
     @Environment(\.theme) private var theme
@@ -488,8 +499,17 @@ struct BoardView: View {
                                          turn: state.turn + 1)
         if fatal {
             triggerDeath(previous: state.player, contact: target)
-            // The death sound (calm, timed by the audio layer to land on the §6d fizz).
+            // The soft error tap fires now, at the instant of contact — feeling the hit
+            // when you hit is the intended feel, and a system tap can't be host-time
+            // scheduled anyway. The death *sound* is offset by the audio layer to swell
+            // on the §6d fizz (≈ step + deathFreeze later), so it is tap-then-sound, not
+            // simultaneous. A fatal step never calls `state.move()` (the death is
+            // predicted and the mutation deferred to `finishDeath()`), so the collision
+            // haptic is fired here, at the point the death is committed — not by reading
+            // `lastMoveOutcome` (which the model sets inside `move()`, a path this branch
+            // bypasses).
             audio.playDeath()
+            haptics.collision()
         } else {
             // Audio: one soft pitched tick per entity that steps this turn — the player
             // (always) and each echo whose recorded path still has a move at this turn.
@@ -510,9 +530,18 @@ struct BoardView: View {
             withAnimation(Motion.step) {
                 _ = state.move(direction)
             }
-            // Reaching the exit alive (the engine sets `hasWon` on this committed step)
-            // plays the gentle solve flourish, timed to land as the player settles.
-            if state.hasWon { audio.playSolve() }
+            // Exactly one haptic per survived input (DoD: one tap per real outcome):
+            // a winning step fires the success tap, an ordinary step fires the light
+            // selection tick (in sync with the slide and its tick). The success tap
+            // fires now, at the winning commit; the solve *sound* is offset one step by
+            // the audio layer to resolve on arrival, so the win tap slightly leads its
+            // flourish. Reaching the exit alive sets `hasWon` on this committed step.
+            if state.hasWon {
+                audio.playSolve()
+                haptics.win()
+            } else {
+                haptics.step()
+            }
         }
     }
 
@@ -530,10 +559,12 @@ struct BoardView: View {
         foldGeneration &+= 1
         fold = FoldEffect(id: foldGeneration, origin: state.start, peelFrom: runEnd,
                           newEchoID: newEcho.id, start: Date())
-        // The fold sound (warm, weighty), landing on the §6c hit-pause onset. Fires
-        // whenever a fold actually happens (the echo count rose), so it stays in step
-        // with the visual whatever triggered the fold.
+        // The fold sound (warm, weighty) and the medium impact tap, landing on the §6c
+        // hit-pause onset. Both fire whenever a fold actually happens (the echo count
+        // rose) and never on a refused fold (empty run / budget / post-win — the count
+        // doesn't change), so they stay in step with the visual whatever triggered it.
         audio.playFold()
+        haptics.fold()
     }
 
     /// Capture the kill and start the death dissolve — **without** mutating the model.
@@ -618,13 +649,13 @@ private extension View {
 }
 
 #Preview("Light") {
-    BoardView(state: GameState(), audio: AudioManager())
+    BoardView(state: GameState(), audio: AudioManager(), haptics: HapticsManager())
         .environment(\.theme, .light)
         .background(Color(hex: 0xF5EDDD))
 }
 
 #Preview("Invert") {
-    BoardView(state: GameState(), audio: AudioManager())
+    BoardView(state: GameState(), audio: AudioManager(), haptics: HapticsManager())
         .environment(\.theme, .invert)
         .background(Color(hex: 0x141210))
 }

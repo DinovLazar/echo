@@ -912,4 +912,69 @@ final class ECHOTests: XCTestCase {
         XCTAssertTrue(won.currentRun.isEmpty)
         XCTAssertEqual(won.echoes.count, 1)                  // echo survives the reset
     }
+
+    // MARK: - Move outcome signal (Phase 2.05)
+
+    /// The additive, read-only `lastMoveOutcome` is `nil` until the first committed
+    /// move (the call site's "nothing has happened yet").
+    func testLastMoveOutcomeIsNilBeforeAnyMove() {
+        let state = GameState()
+        XCTAssertNil(state.lastMoveOutcome)
+    }
+
+    /// A survived committed step sets `.stepped`.
+    func testLastMoveOutcomeIsSteppedOnSurvivedStep() {
+        let state = GameState()
+        XCTAssertTrue(state.move(.up))
+        XCTAssertEqual(state.lastMoveOutcome, .stepped)
+        XCTAssertTrue(state.move(.right))
+        XCTAssertEqual(state.lastMoveOutcome, .stepped)      // still just a step
+    }
+
+    /// The committed step that reaches the exit alive sets `.won` (not `.stepped`); a
+    /// non-exit step on the way stays `.stepped`.
+    func testLastMoveOutcomeIsWonOnReachingExit() {
+        let state = GameState(width: 3, height: 3,
+                              start: GridCoordinate(row: 0, column: 0),
+                              exit: GridCoordinate(row: 0, column: 2))
+        XCTAssertTrue(state.move(.right))                    // (0,1) — not the exit yet
+        XCTAssertEqual(state.lastMoveOutcome, .stepped)
+        XCTAssertTrue(state.move(.right))                    // (0,2) == exit
+        XCTAssertTrue(state.hasWon)
+        XCTAssertEqual(state.lastMoveOutcome, .won)
+    }
+
+    /// The fatal step that touches an echo sets `.died`, and the value **persists**
+    /// through the rewind (the player is back on `start`, yet the last outcome still
+    /// reads `.died` — what a feedback consumer needs to fire the collision tap).
+    func testLastMoveOutcomeIsDiedOnCollisionAndPersistsThroughRewind() {
+        let state = GameState()
+        XCTAssertTrue(state.move(.right))                    // step onto (3,4)
+        XCTAssertEqual(state.lastMoveOutcome, .stepped)
+        state.fold()                                         // echo [.right] stands on (3,4)
+        XCTAssertEqual(state.lastMoveOutcome, .stepped)      // fold doesn't touch the signal
+        state.move(.right)                                   // land on the echo at turn 1 → death
+        XCTAssertEqual(state.lastMoveOutcome, .died)
+        XCTAssertEqual(state.player, state.start)            // rewound, but the signal stands
+        XCTAssertEqual(state.turn, 0)
+    }
+
+    /// A blocked / no-op move leaves `lastMoveOutcome` **unchanged** — the call site
+    /// reads `move()` returning `false` as "nothing happened." Here a committed step
+    /// sets `.stepped`, then an off-grid no-op leaves it `.stepped`.
+    func testLastMoveOutcomeUnchangedOnNoOpMove() {
+        let state = GameState(start: GridCoordinate(row: 0, column: 0))
+        XCTAssertTrue(state.move(.right))                    // (0,1) committed
+        XCTAssertEqual(state.lastMoveOutcome, .stepped)
+        XCTAssertFalse(state.move(.up))                      // off the top edge → no-op
+        XCTAssertEqual(state.lastMoveOutcome, .stepped)      // unchanged
+    }
+
+    /// A no-op as the very first move leaves the signal at its initial `nil` (it is
+    /// never spuriously set by a refused move).
+    func testLastMoveOutcomeStaysNilWhenFirstMoveIsBlocked() {
+        let state = GameState(start: GridCoordinate(row: 0, column: 0))
+        XCTAssertFalse(state.move(.up))                      // off-grid no-op
+        XCTAssertNil(state.lastMoveOutcome)
+    }
 }
