@@ -42,7 +42,7 @@ The two big moments of the game stopped being instant pops and became the satisf
   - **edited** `ECHO/Views/BoardView.swift` — effect `@State` + generations, overlay mount (only while an effect is in flight), `.onChange(of: state.echoes.count)` fold-detect, two `.task(id:)` cleanups, hide the dissolving/peeling pieces in the steady layers, `commitMove` fatal-branch → deferred death dissolve + input lock, `triggerFold`/`triggerDeath`/`finishDeath` helpers.
   - **edited** `ECHO/Theme/Motion.swift` — added `Motion.Span` (raw §1c phase durations) and `Ease` (scalar cubic-Bézier of the §6a curves). Existing curves/tokens untouched.
   - **edited** `ECHO/App/ContentView.swift` — **comment only**: a note on the throwaway debug bar that the real in-room controls (Part 2/3) must respect the `fold == nil && death == nil` effect lock (no behaviour change).
-  - Commit hash: recorded in the follow-up docs commit (this report is filed with the phase commit).
+  - Phase commit: **`3fbcf7e`** on `phase-2.03-fold-death`.
 - **Design:** implements `docs/design-handovers/Part-2-Phase-01-Handover.md` §1c (motion tokens), §6a (curves), §6c (fold), §6d (death). No new handover authored.
 - **Ops / manual:** none. **`DEVELOPMENT_TEAM`** — Xcode writes `DEVELOPMENT_TEAM = X74CK53A6Q` into the working-tree `.pbxproj` on each local build; it is **left unstaged** so the public repo stays team-less (no secret is committed; the value lives only in Lazar's local working tree).
 
