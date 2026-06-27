@@ -44,6 +44,12 @@ struct BoardView: View {
     /// re-renders this view when the state it reads changes).
     let state: GameState
 
+    /// The generative-audio manager, owned and started by `ContentView` (Phase 2.04).
+    /// Presentation-only, like the motion: `commitMove`/`triggerFold`/`triggerDeath`
+    /// fire its sounds on the same paths the animation already uses, gated by its own
+    /// `isEnabled` switch. Passed in (not in the environment) for symmetry with `state`.
+    let audio: AudioManager
+
     /// The active palette (Light by default; `ContentView` injects it). The single
     /// switch point a later Settings phase (2.06) will bind to a user toggle.
     @Environment(\.theme) private var theme
@@ -482,12 +488,31 @@ struct BoardView: View {
                                          turn: state.turn + 1)
         if fatal {
             triggerDeath(previous: state.player, contact: target)
+            // The death sound (calm, timed by the audio layer to land on the §6d fizz).
+            audio.playDeath()
         } else {
+            // Audio: one soft pitched tick per entity that steps this turn — the player
+            // (always) and each echo whose recorded path still has a move at this turn.
+            // Derived read-only from the public positions *before* the model advances
+            // (echoes' per-turn directions are fixed by their recorded moves), and all
+            // fired at one audio time so a multi-echo turn sounds as a chord, not a
+            // flam. Hazards are deliberately not voiced — the rhythm is made of *your*
+            // moves and their echoes (Phase 2.04). Adds no model API.
+            let fromTurn = state.turn
+            var ticks: [Direction] = [direction]
+            for echo in state.echoes where fromTurn < echo.moves.count {
+                ticks.append(echo.moves[fromTurn])
+            }
+            audio.playStep(directions: ticks)
+
             lastStepHorizontal = (direction == .left || direction == .right)
             stepTick &+= 1
             withAnimation(Motion.step) {
                 _ = state.move(direction)
             }
+            // Reaching the exit alive (the engine sets `hasWon` on this committed step)
+            // plays the gentle solve flourish, timed to land as the player settles.
+            if state.hasWon { audio.playSolve() }
         }
     }
 
@@ -505,6 +530,10 @@ struct BoardView: View {
         foldGeneration &+= 1
         fold = FoldEffect(id: foldGeneration, origin: state.start, peelFrom: runEnd,
                           newEchoID: newEcho.id, start: Date())
+        // The fold sound (warm, weighty), landing on the §6c hit-pause onset. Fires
+        // whenever a fold actually happens (the echo count rose), so it stays in step
+        // with the visual whatever triggered the fold.
+        audio.playFold()
     }
 
     /// Capture the kill and start the death dissolve — **without** mutating the model.
@@ -589,13 +618,13 @@ private extension View {
 }
 
 #Preview("Light") {
-    BoardView(state: GameState())
+    BoardView(state: GameState(), audio: AudioManager())
         .environment(\.theme, .light)
         .background(Color(hex: 0xF5EDDD))
 }
 
 #Preview("Invert") {
-    BoardView(state: GameState())
+    BoardView(state: GameState(), audio: AudioManager())
         .environment(\.theme, .invert)
         .background(Color(hex: 0x141210))
 }

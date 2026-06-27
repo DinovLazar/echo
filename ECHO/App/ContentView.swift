@@ -42,6 +42,13 @@ struct ContentView: View {
     /// Defaults to Light; the throwaway debug *Invert* button flips it.
     @State private var themeMode: ThemeMode = .light
 
+    /// The generative-audio manager (Phase 2.04), created here and `start()`-ed at
+    /// launch so the first tick has no spin-up latency, then kept for the session.
+    /// Passed into `BoardView`, which fires its sounds from the same step/fold/death
+    /// paths the motion uses. Its `isEnabled` switch is the binding point the Settings
+    /// sound-toggle (2.06) will use; no toggle UI or persistence is built this phase.
+    @State private var audio = AudioManager()
+
     /// The resolved palette for this mode. Owned here (not read from the environment)
     /// because this view is what *provides* the environment value to its children.
     private var theme: Theme { Theme.make(themeMode) }
@@ -54,12 +61,15 @@ struct ContentView: View {
                 .ignoresSafeArea()
             // ...while the board + debug bar sit within the safe area.
             VStack(spacing: 0) {
-                BoardView(state: state)
+                BoardView(state: state, audio: audio)
                 debugBar
             }
         }
         .environment(\.theme, theme)
         .tint(theme.ink)
+        // Pre-warm and start the audio engine at launch (idempotent; a no-op in
+        // previews). Kept running for the session so ticks fire with no latency.
+        .task { audio.start() }
     }
 
     // MARK: - Room loading

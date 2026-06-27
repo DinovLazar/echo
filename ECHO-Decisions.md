@@ -357,6 +357,38 @@
 - **Consequences:** The peel is plainly legible and on-message, at the cost of one concrete interpretation of an under-specified handover detail (the handover's words say "peels off the path"; the straight run-end→start slide is the chosen realisation). Ends in exactly the settled post-fold state 2.02 produced (new echo present at `start`, turn 0). Degenerate edge: a run that ends *on* `start` has run-end == start, so the peel crossfades in place (rare; acceptable). Presentation-only. Flagged for the on-device feel pass.
 - **Links:** Phase 2.03; Phase 2.01 handover §6c; `ECHO/Views/BoardEffects.swift` (`drawFold`), `ECHO/Views/BoardView.swift` (`triggerFold`, `echoes`).
 
+### D-045 · 2026-06-27 · Audio architecture — AVAudioEngine + player nodes + synthesized buffers
+- **Status:** Accepted
+- **Context:** Phase 2.04 needs a percussive tick on every step, fired on demand with sub-100 ms latency and able to layer many simultaneous voices, under the project's MainActor / Swift 6 regime and zero-external-package rule.
+- **Decision:** Use one `AVAudioEngine` with `AVAudioPlayerNode`(s) into the main mixer, playing short `AVAudioPCMBuffer`s that are **procedurally synthesized at startup** (no bundled audio files). Engine and nodes are owned by a MainActor type and touched only from MainActor.
+- **Alternatives considered:** Bundled recorded sample files — rejected: adds binary assets to a public repo, fixes the pitches, and is harder to tune. An `AVAudioSourceNode` with a real-time render block doing live synthesis — rejected: puts DSP on the audio thread under `@Sendable`/nonisolated constraints (a Swift-6 isolation hazard) and is overkill for discrete ticks.
+- **Consequences:** Keeps the repo asset-free and the concurrency story simple; pitches are exact and tunable in code. Downside: a one-time startup cost to synthesize the buffers, and synthesized timbres are simpler than recorded instruments (acceptable for a soft minimalist tick).
+- **Links:** Phase 2.04; ECHO-Plan §6 (Audio = AVAudioEngine); D-013 (MainActor regime).
+
+### D-046 · 2026-06-27 · Move-tick voicing — soft pitched percussion, pitch by direction
+- **Status:** Accepted
+- **Context:** The design calls the step sound a "soft percussive tick," and the signature payoff is that a solved room sounds like music made from the player's own moves. A single uniform click delivers rhythm but no melodic life.
+- **Decision:** Voice the step as soft **pitched** percussion (marimba/kalimba-like), with the four move directions mapped to four pitches from a fixed **pentatonic** set (up = higher, down = lower, left/right = middle). Pentatonic guarantees any simultaneous combination stays consonant; the mapping makes each entity's path a little melodic phrase and stacked echoes layer phrases.
+- **Alternatives considered:** One uniform unpitched click — rejected: monotonous, no path-melody. A sustained melodic instrument — rejected: not "percussive," and muddy when many voices overlap.
+- **Consequences:** The generative-music payoff is real and stays consonant at any density. Downside: pitch-from-direction is an abstraction players may not consciously notice, and it leans a hair more "musical" than the literal word "percussive" — judged faithful because pitched percussion is still percussion.
+- **Links:** Phase 2.04; ECHO-Plan §5/§14; Full Game Design "Feel".
+
+### D-047 · 2026-06-27 · AVAudioSession category — .ambient, mixes with others, honours silent switch
+- **Status:** Accepted
+- **Context:** A calm, single-player puzzle game has to decide whether its audio plays over the user's own music and whether the hardware silent switch mutes it.
+- **Decision:** Use `.ambient` with `.mixWithOthers`: ECHO's audio mixes politely with anything already playing and is silenced by the hardware mute switch.
+- **Alternatives considered:** `.playback` — rejected: would play over the user's music and sound through silent mode, which is intrusive for a quiet game.
+- **Consequences:** Respectful, non-intrusive behaviour; the in-app sound toggle (2.06) is the primary control. Downside: the signature audio is silenced when the phone is on silent — acceptable, flagged for the Part 2 feel pass to revisit if it surprises.
+- **Links:** Phase 2.04; Phase 2.06 (sound toggle).
+
+### D-048 · 2026-06-27 · Phase 2.04 scope — full first audio pass, not step-ticks-only
+- **Status:** Accepted
+- **Context:** The phase-plan one-liner for 2.04 says "per-move ticks," but there is no later audio phase (2.05 is haptics, 2.06 is Settings), so any moment left silent now stays silent indefinitely.
+- **Decision:** 2.04 ships the signature per-step percussion **plus** restrained synthesized sounds for the **fold**, **death**, and **solve** moments — the events that are already implemented and have visual beats to land on.
+- **Alternatives considered:** Step-ticks-only — rejected: leaves fold/death/solve permanently silent and fails the "feedback on every meaningful action" feel bar. Include a deny sound too — rejected: the deny interaction/guidance text isn't wired yet, so there's no trigger.
+- **Consequences:** A complete, non-silent feel pass in one phase. Downside: a larger 2.04 than the one-liner, and more sound-design surface to tune in the feel pass.
+- **Links:** Phase 2.04; ECHO-Phase-Plan Part 2; Quality bar ("no TODO-later when the real fix is in reach").
+
 ---
 
 ### Decision-log conventions
