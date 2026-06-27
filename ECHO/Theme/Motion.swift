@@ -83,3 +83,74 @@ nonisolated enum Motion {
     /// `motion.guidanceOut` — `350 ms`, `curve.easeIn`.
     static let guidanceOut = Curve.easeIn(0.350)
 }
+
+// MARK: - Phase durations (seconds) for the Canvas-driven effect layer (2.03)
+
+extension Motion {
+    /// The handover §1c durations as raw seconds. The fold/death choreography
+    /// (Phase 2.03) is advanced by *elapsed time* inside a `TimelineView`/`Canvas`
+    /// rather than by a baked SwiftUI `Animation`, so it needs the numbers, not the
+    /// curve values above. These are the *same* §1c values — kept here, beside the
+    /// `Animation` tokens, so no magic timing number is scattered through the view.
+    nonisolated enum Span {
+        /// `motion.foldHitPause` — the board-still beat at the instant of a fold
+        /// (§6c, 3 frames @60fps).
+        static let foldHitPause: TimeInterval = 0.050
+        /// `motion.foldRipple` — the grid ripple radiating from the fold cell (§6c).
+        static let foldRipple: TimeInterval = 0.220
+        /// `motion.foldPeel` — the new echo peeling off the player (§6c).
+        static let foldPeel: TimeInterval = 0.180
+
+        /// `motion.deathFreeze` — the calm hold at the instant of contact (§6d,
+        /// 4 frames @60fps).
+        static let deathFreeze: TimeInterval = 0.066
+        /// `motion.deathFizz` — the soft particle dissolve (§6d).
+        static let deathFizz: TimeInterval = 0.320
+        /// The red-vignette flash that rises and falls alongside the fizz (§6d,
+        /// "~200 ms").
+        static let deathVignette: TimeInterval = 0.200
+
+        /// The fatal step's glide onto the contact tile. A fatal move is still a
+        /// move, so it slides like any other step (`motion.step`, §6b) before the
+        /// death beats begin — the project never teleports a piece (Plan §5). The
+        /// death-specific beats above keep their own §6d numbers.
+        static let step: TimeInterval = 0.120
+    }
+}
+
+// MARK: - Scalar easing for the Canvas effect layer
+
+/// The named §6a curves as **scalar** easings (input/output both in `0…1`), for the
+/// Canvas effect layer that advances by elapsed time. Each evaluates the exact same
+/// cubic Bézier the matching `Curve` `Animation` uses, so a canvas-driven effect and
+/// a `withAnimation` one share the handover's curve shape. `nonisolated` to match the
+/// rest of the token layer (D-013/D-040).
+nonisolated enum Ease {
+    /// Symmetric ease-in-out — `curve.standard` `(0.42, 0, 0.58, 1)`.
+    static func standard(_ t: Double) -> Double { bezier(0.42, 0.0, 0.58, 1.0, t) }
+    /// Decelerate-in — `curve.easeOut` `(0, 0, 0.2, 1)`.
+    static func easeOut(_ t: Double) -> Double { bezier(0.0, 0.0, 0.2, 1.0, t) }
+    /// Accelerate-out — `curve.easeIn` `(0.4, 0, 1, 1)`.
+    static func easeIn(_ t: Double) -> Double { bezier(0.4, 0.0, 1.0, 1.0, t) }
+
+    /// Evaluate a cubic-Bézier easing with implicit endpoints `P0 = (0,0)`,
+    /// `P3 = (1,1)` at time fraction `t`: solve `x(u) = t` for the Bézier parameter
+    /// `u` (binary search — monotone in `x` for these control points), then return
+    /// `y(u)`. Cheap and deterministic.
+    static func bezier(_ x1: Double, _ y1: Double, _ x2: Double, _ y2: Double, _ t: Double) -> Double {
+        let x = min(max(t, 0), 1)
+        // One axis of the Bézier at parameter `u` (P0 and P3 components are 0 and 1).
+        func axis(_ a: Double, _ b: Double, _ u: Double) -> Double {
+            let mu = 1 - u
+            return 3 * mu * mu * u * a + 3 * mu * u * u * b + u * u * u
+        }
+        var lo = 0.0, hi = 1.0, u = x
+        for _ in 0..<24 {
+            let cx = axis(x1, x2, u)
+            if abs(cx - x) < 1e-5 { break }
+            if cx < x { lo = u } else { hi = u }
+            u = (lo + hi) * 0.5
+        }
+        return axis(y1, y2, u)
+    }
+}

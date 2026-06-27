@@ -98,6 +98,14 @@ struct ContentView: View {
     /// room's budget, plus a "Solved ✓" stand-in once the exit is reached (the real
     /// win overlay is Part 3). It sits below the board, clear of the swipe/tap area,
     /// so it never intercepts input.
+    ///
+    /// NOTE (Phase 2.03): these buttons mutate `state` **directly**, bypassing
+    /// `BoardView`'s fold/death input lock (`commitMove` refuses input while an effect
+    /// plays). That is acceptable for this throwaway bar — pressing one mid-effect only
+    /// produces a cosmetic glitch (e.g. a phantom echo / a stale overlay), never an
+    /// invalid engine state. **The real in-room controls (Part 2/3) must gate on the
+    /// same `fold == nil && death == nil` lock**, since a death defers its restart
+    /// until the dissolve ends and must not be mutated out from under.
     private var debugBar: some View {
         HStack(spacing: 12) {
             Button("Fold") { state.fold() }

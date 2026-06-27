@@ -3,10 +3,10 @@
 //  ECHO
 //
 //  Phase 1.03 (Grid + Move) → 1.04 (Fold) → 1.06 (Room contents) → 2.02 (The
-//  board's real look + motion). The state-driven board, now rendered to the locked
-//  Phase 2.01 visual design instead of grey boxes: real colours/geometry from the
-//  `Theme` token layer, in both Light and Invert palettes, with pieces that glide
-//  between cells instead of snapping.
+//  board's real look + motion) → 2.03 (The fold choreography & the death dissolve).
+//  The state-driven board, rendered to the locked Phase 2.01 visual design: real
+//  colours/geometry from the `Theme` token layer, in both Light and Invert palettes,
+//  with pieces that glide between cells instead of snapping.
 //
 //  Presentation only — the engine is untouched. `GameState` still owns every rule
 //  (turn order, collision, win, replay); this view animates how those state changes
@@ -18,10 +18,17 @@
 //      squash, no shadow, smaller and translucent so they recede (§2.2 / §3).
 //    • Enemy/hazard — a heavier 140 ms `curve.standard` slide with a ~30 ms
 //      anticipation lean-in toward travel, no overshoot (§6e).
-//  A no-op move animates nothing; a death restart and a fold snap instantly (their
-//  full choreography — fizz, ripple, peel — is Phase 2.03). The slide/squash fire
-//  only for a real, survived step; resets are not wrapped in an animation, so they
-//  snap on the next frame (handover §6d restart = 0 ms).
+//  A no-op move animates nothing; a survived step slides/squashes; a reset/step-back/
+//  room-load snaps (not wrapped in an animation — handover §6d restart = 0 ms).
+//
+//  Phase 2.03 wires the two big *events* (presentation still only). Detecting a fold
+//  (the echo count rose) plays the §6c choreography — hit-pause → grid ripple → the
+//  new grey echo peeling off the player — over the rewound board. Predicting a fatal
+//  step hands the §6d death dissolve a read-only descriptor and **defers** the model
+//  mutation: the effects overlay (`BoardEffectsOverlay`, SwiftUI Canvas) plays the
+//  glide → calm freeze → soft particle fizz → red vignette, and `finishDeath()`
+//  performs the instant restart once it has played. The engine still decides every
+//  outcome; the overlay only reads predicates to know *when*/*where* to draw.
 //
 //  Glows and the player shadow render *outside* the cell and are never clipped (no
 //  `.clipped`/`.clipShape` anywhere here). Every drawn piece has hit testing off so
@@ -49,6 +56,19 @@ struct BoardView: View {
     /// Whether the last survived step was horizontal — chooses the squash axis.
     @State private var lastStepHorizontal = true
 
+    /// The in-flight fold choreography (hit-pause → ripple → echo peel), or `nil` at
+    /// rest. Set when a fold is detected (the echo count rose); cleared by a `task`
+    /// once the choreography has played (Phase 2.03).
+    @State private var fold: FoldEffect? = nil
+    /// The in-flight death dissolve (glide → freeze → fizz + red note), or `nil` at
+    /// rest. Set the instant a fatal step is predicted — **before** the model is
+    /// mutated — so the canvas can show the kill at the contact tile; the (instant)
+    /// restart is performed by `finishDeath()` once the dissolve has played.
+    @State private var death: DeathEffect? = nil
+    /// Monotonic generations so each fold/death keys its own cleanup `task`.
+    @State private var foldGeneration = 0
+    @State private var deathGeneration = 0
+
     /// Board occupies this fraction of the smaller available dimension, leaving a
     /// margin from the safe-area edges.
     private static let fillFraction: CGFloat = 0.82
@@ -74,11 +94,41 @@ struct BoardView: View {
                 echoes(cell: cell)
                 hazardMarks(cell: cell)
                 playerSquare(cell: cell)
+                // The transient fold/death choreography, on top of the steady board.
+                // Mounted only while an effect is in flight, so its per-frame
+                // `TimelineView` clock costs nothing at rest (Phase 2.03).
+                if fold != nil || death != nil {
+                    BoardEffectsOverlay(fold: fold, death: death, cell: cell, theme: theme)
+                        .frame(width: boardSize.width, height: boardSize.height)
+                        .allowsHitTesting(false)
+                }
             }
             .frame(width: boardSize.width, height: boardSize.height)
             // Centre the board within the available (safe-area) space.
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .gesture(swipeGesture)
+            // A fold is the only thing that grows the echo count, so an increment is
+            // an unambiguous "a fold just happened" — play its choreography. (Clear
+            // and room-load drop the count to 0; reset/step-back/death never touch
+            // it; so none of those false-trigger.)
+            .onChange(of: state.echoes.count) { old, new in
+                if new > old { triggerFold() }
+            }
+            // Clear each effect once it has fully played. Keyed on the generation so a
+            // new event cancels the previous timer; the model restart a death needs is
+            // performed here, at the end of the dissolve (handover §6d restart = 0 ms).
+            .task(id: foldGeneration) {
+                guard fold != nil else { return }
+                let total = Motion.Span.foldHitPause + max(Motion.Span.foldRipple, Motion.Span.foldPeel)
+                try? await Task.sleep(for: .seconds(total))
+                if !Task.isCancelled { fold = nil }
+            }
+            .task(id: deathGeneration) {
+                guard death != nil else { return }
+                let total = Motion.Span.step + Motion.Span.deathFreeze + Motion.Span.deathFizz
+                try? await Task.sleep(for: .seconds(total))
+                if !Task.isCancelled { finishDeath() }
+            }
         }
     }
 
@@ -220,6 +270,14 @@ struct BoardView: View {
         let stroke = scaled(BoardMetrics.strokeEcho, cell: cell)
         return ForEach(state.echoes) { echo in
             let position = state.position(of: echo)
+            // The effects overlay owns an echo's appearance in two cases, so the
+            // steady layer hides it to avoid a double-draw: while a death dissolves,
+            // the echo(es) the player touched (gliding onto the contact tile, then
+            // fizzing); and while a fold plays, the freshly-banked echo (peeling in
+            // from the run-end). In both, the steady echo un-hides when the effect
+            // clears, seamlessly taking over its resting render.
+            let dissolving = death?.collidingEchoIDs.contains(echo.id) == true
+            let peeling = fold?.newEchoID == echo.id
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(theme.echoBase.opacity(theme.echoFillOpacity))
                 .overlay(
@@ -229,6 +287,7 @@ struct BoardView: View {
                 )
                 .frame(width: size, height: size)
                 .position(center(of: position, cell: cell))
+                .opacity(dissolving || peeling ? 0 : 1)
                 .allowsHitTesting(false)
         }
     }
@@ -340,6 +399,10 @@ struct BoardView: View {
                     x: 0,
                     y: scaled(BoardMetrics.shadowOffsetY, cell: cell))
             .position(center(of: state.player, cell: cell))
+            // While a death is dissolving, the effects overlay draws the player
+            // gliding onto the contact tile, freezing, then fizzing — so the steady
+            // player is hidden until the run restarts (when it reappears at start).
+            .opacity(death == nil ? 1 : 0)
             .allowsHitTesting(false)
     }
 
@@ -387,20 +450,25 @@ struct BoardView: View {
     }
 
     /// Run one move through the engine and choose how to *display* it. The engine is
-    /// the sole authority on what happens; this only decides slide-vs-snap and fires
-    /// the squash. The model's own public predicates are read (no mutation) to
-    /// predict the outcome **before** committing, because the animation choice has to
-    /// wrap the mutation:
+    /// the sole authority on what happens; this only decides slide-vs-snap-vs-dissolve
+    /// and fires the squash. The model's own public predicates are read (no mutation)
+    /// to predict the outcome **before** committing, because the presentation choice
+    /// has to wrap (or, for a death, defer) the mutation:
     ///   • A no-op (off-grid / wall / closed door / after a win) → nothing moves.
     ///   • A survived step → wrap the commit in `withAnimation(.step)` so the player
     ///     and every echo/hazard glide in lockstep, and bump `stepTick` so the
     ///     squash/anticipation fire.
-    ///   • A fatal step → commit **without** animation, so the instant restart snaps
-    ///     the board back to start on the next frame (handover §6d restart = 0 ms;
-    ///     the fizz/vignette is Phase 2.03).
+    ///   • A fatal step → **do not mutate the model yet**: hand the death dissolve a
+    ///     descriptor of the kill (where the player and the touched echo(es) glide to,
+    ///     who the killer is) and let the effects overlay play the freeze → fizz →
+    ///     red note. The (instant) restart the engine would perform happens in
+    ///     `finishDeath()` once the dissolve has played (handover §6d restart = 0 ms).
     /// If the prediction ever disagreed with the engine it would only mis-pick the
-    /// animation, never the outcome — the engine still decides the move.
+    /// presentation, never the outcome — the engine still decides the move.
     private func commitMove(_ direction: Direction) {
+        // Input is locked while a fold or death choreography is playing, so the held
+        // model state a death relies on can't be moved out from under it.
+        guard fold == nil, death == nil else { return }
         guard !state.hasWon else { return }
         let target = GridCoordinate(row: state.player.row + direction.offset.row,
                                     column: state.player.column + direction.offset.column)
@@ -413,7 +481,7 @@ struct BoardView: View {
                                          newPlayerCell: target,
                                          turn: state.turn + 1)
         if fatal {
-            state.move(direction)   // restarts the run — snap, no animation
+            triggerDeath(previous: state.player, contact: target)
         } else {
             lastStepHorizontal = (direction == .left || direction == .right)
             stepTick &+= 1
@@ -421,6 +489,75 @@ struct BoardView: View {
                 _ = state.move(direction)
             }
         }
+    }
+
+    // MARK: - Effect triggers (presentation only)
+
+    /// Begin the fold choreography over the just-rewound board. Called from
+    /// `onChange(of: state.echoes.count)` — the model has already folded (player and
+    /// every echo are back on `start`, turn 0). The newest echo (`echoes.last`) is the
+    /// one just banked; its run-end cell (`position` at the end of its recorded path)
+    /// is where present-you stood when folding, so the peel starts there and rewinds
+    /// to `start`.
+    private func triggerFold() {
+        guard let newEcho = state.echoes.last else { return }
+        let runEnd = newEcho.position(start: state.start, turn: newEcho.moves.count)
+        foldGeneration &+= 1
+        fold = FoldEffect(id: foldGeneration, origin: state.start, peelFrom: runEnd,
+                          newEchoID: newEcho.id, start: Date())
+    }
+
+    /// Capture the kill and start the death dissolve — **without** mutating the model.
+    /// Everything the overlay needs is derived read-only from the same pure position
+    /// functions the board draws from, at the turn the fatal step would land on
+    /// (`turn + 1`):
+    ///   • the colliding echo(es): those whose `turn + 1` cell is the contact tile —
+    ///     they glide there from their current cell and fizz with the player;
+    ///   • the killer hazard (if any): the one whose glow pulses once (§6d).
+    /// `finishDeath()` performs the restart later.
+    ///
+    /// The colliding-echo set is matched by **land-on only** (`turn + 1` cell ==
+    /// contact). The engine's `playerCollides` also has an echo cross-paths (swap)
+    /// branch, but it is parity-dormant against echoes (player and echoes share an
+    /// origin and a one-step cadence, so they can never trade adjacent tiles — see
+    /// `GameState.playerCollides`), so land-on captures every *reachable* echo death.
+    /// If a future mechanic ever made an echo move off the player's cadence, this
+    /// would need the swap branch too; until then it is complete.
+    private func triggerDeath(previous: GridCoordinate, contact: GridCoordinate) {
+        let deathTurn = state.turn + 1
+        let collidingEchoes = state.echoes.filter {
+            $0.position(start: state.start, turn: deathTurn) == contact
+        }
+        let killer = state.hazards.first { hazard in
+            let now = hazard.position(at: deathTurn)
+            if now == contact { return true }                        // land-on
+            let before = hazard.position(at: state.turn)
+            return before == contact && now == previous              // cross-paths (swap)
+        }
+
+        deathGeneration &+= 1
+        death = DeathEffect(
+            id: deathGeneration,
+            previous: previous,
+            contact: contact,
+            echoOrigins: collidingEchoes.map { state.position(of: $0) },
+            collidingEchoIDs: Set(collidingEchoes.map(\.id)),
+            // Pulse the glow on the killer where its diamond is actually drawn — its
+            // current (held) tile — so the "it got you" flare sits on the visible
+            // enemy. The model is held at this turn during the dissolve, so the steady
+            // diamond stays here; pulsing at its post-step tile would float the glow a
+            // cell away from the enemy that caused it.
+            killerHazard: killer.map { state.position(of: $0) },
+            start: Date())
+    }
+
+    /// End the death dissolve by performing the restart the engine would have done on
+    /// the fatal step — present-you back to `start`, the run scrapped, every folded
+    /// echo intact (`restartRun()` is exactly that op). Instant and clean: not wrapped
+    /// in an animation, so the board snaps back on the next frame (handover §6d).
+    private func finishDeath() {
+        state.restartRun()
+        death = nil
     }
 }
 
