@@ -1,0 +1,25 @@
+{
+  "id": "room-14",
+  "name": "Twin Patrols",
+  "width": 7,
+  "height": 4,
+  "start": { "row": 1, "column": 0 },
+  "exit":  { "row": 1, "column": 6 },
+  "echoBudget": 1,
+  "walls": [
+    { "row": 0, "column": 2 }, { "row": 2, "column": 2 }, { "row": 3, "column": 2 }, { "row": 0, "column": 3 }, { "row": 0, "column": 4 }, { "row": 0, "column": 5 },
+    { "row": 3, "column": 3 }, { "row": 3, "column": 4 }, { "row": 3, "column": 5 }
+  ],
+  "switches": [
+    { "id": "s1", "cell": { "row": 0, "column": 0 } }
+  ],
+  "doors": [
+    { "id": "d1", "cells": [ { "row": 1, "column": 2 } ], "heldBy": ["s1"] }
+  ],
+  "hazards": [
+    { "id": "h1", "start": { "row": 1, "column": 3 },
+      "path": ["right","right","left","left"], "loops": true },
+    { "id": "h2", "start": { "row": 1, "column": 5 },
+      "path": ["left","left","right","right"], "loops": true }
+  ]
+}

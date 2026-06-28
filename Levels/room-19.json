@@ -1,0 +1,28 @@
+{
+  "id": "room-19",
+  "name": "Lattice",
+  "width": 8,
+  "height": 6,
+  "start": { "row": 3, "column": 1 },
+  "exit":  { "row": 2, "column": 7 },
+  "echoBudget": 3,
+  "walls": [
+    { "row": 0, "column": 4 }, { "row": 1, "column": 4 }, { "row": 4, "column": 4 }, { "row": 5, "column": 4 }, { "row": 0, "column": 6 }, { "row": 1, "column": 6 },
+    { "row": 3, "column": 6 }, { "row": 4, "column": 6 }, { "row": 5, "column": 6 }
+  ],
+  "switches": [
+    { "id": "s1", "cell": { "row": 1, "column": 0 } },
+    { "id": "s2", "cell": { "row": 5, "column": 0 } },
+    { "id": "s3", "cell": { "row": 3, "column": 0 } }
+  ],
+  "doors": [
+    { "id": "d1", "cells": [ { "row": 2, "column": 4 }, { "row": 3, "column": 4 } ], "heldBy": ["s1", "s2"] },
+    { "id": "d2", "cells": [ { "row": 2, "column": 6 } ], "heldBy": ["s3"] }
+  ],
+  "hazards": [
+    { "id": "h1", "start": { "row": 2, "column": 3 },
+      "path": ["right","right","left","left"], "loops": true },
+    { "id": "h2", "start": { "row": 3, "column": 4 },
+      "path": ["right","left","left","right"], "loops": true }
+  ]
+}

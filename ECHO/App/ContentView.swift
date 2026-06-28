@@ -31,12 +31,16 @@
 import SwiftUI
 
 struct ContentView: View {
-    /// The ten teaching rooms, in order. `Next` cycles through these (Phase 1.08),
-    /// replacing the three throwaway proof rooms. The real Level Select is Part 3
-    /// (D-037) — this is still a throwaway debug cycle with no saved progress.
+    /// The full campaign, in order: the ten teaching rooms (Phase 1.08) followed by
+    /// the ten Part-3 campaign rooms (Phase 3.01), so play runs straight through
+    /// `room-01 → room-20` and ends at the finale. `Next` cycles through these. The
+    /// real Level Select is Part 3 (D-037) — this is still a throwaway debug cycle
+    /// with no saved progress.
     private static let roomIDs = [
         "room-01", "room-02", "room-03", "room-04", "room-05",
         "room-06", "room-07", "room-08", "room-09", "room-10",
+        "room-11", "room-12", "room-13", "room-14", "room-15",
+        "room-16", "room-17", "room-18", "room-19", "room-20",
     ]
 
     /// Index of the room currently loaded into `state`.

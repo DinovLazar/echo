@@ -1,0 +1,25 @@
+{
+  "id": "room-17",
+  "name": "Threadneedle",
+  "width": 8,
+  "height": 5,
+  "start": { "row": 2, "column": 0 },
+  "exit":  { "row": 2, "column": 7 },
+  "echoBudget": 2,
+  "walls": [
+    { "row": 0, "column": 5 }, { "row": 1, "column": 5 }, { "row": 3, "column": 5 }, { "row": 4, "column": 5 }
+  ],
+  "switches": [
+    { "id": "s1", "cell": { "row": 0, "column": 0 } },
+    { "id": "s2", "cell": { "row": 4, "column": 0 } }
+  ],
+  "doors": [
+    { "id": "d1", "cells": [ { "row": 2, "column": 5 } ], "heldBy": ["s1", "s2"] }
+  ],
+  "hazards": [
+    { "id": "h1", "start": { "row": 0, "column": 2 },
+      "path": ["down","down","up","up"], "loops": true },
+    { "id": "h2", "start": { "row": 4, "column": 3 },
+      "path": ["up","up","down","down"], "loops": true }
+  ]
+}

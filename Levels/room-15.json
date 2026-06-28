@@ -1,0 +1,25 @@
+{
+  "id": "room-15",
+  "name": "The Long Hold",
+  "width": 7,
+  "height": 5,
+  "start": { "row": 2, "column": 0 },
+  "exit":  { "row": 2, "column": 6 },
+  "echoBudget": 2,
+  "walls": [
+    { "row": 0, "column": 2 }, { "row": 1, "column": 2 }, { "row": 3, "column": 2 }, { "row": 4, "column": 2 }, { "row": 0, "column": 4 }, { "row": 1, "column": 4 },
+    { "row": 3, "column": 4 }, { "row": 4, "column": 4 }
+  ],
+  "switches": [
+    { "id": "s1", "cell": { "row": 0, "column": 0 } },
+    { "id": "s2", "cell": { "row": 4, "column": 3 } }
+  ],
+  "doors": [
+    { "id": "d1", "cells": [ { "row": 2, "column": 2 } ], "heldBy": ["s1"] },
+    { "id": "d2", "cells": [ { "row": 2, "column": 4 } ], "heldBy": ["s2"] }
+  ],
+  "hazards": [
+    { "id": "h1", "start": { "row": 1, "column": 5 },
+      "path": ["up","right","down","down","down","down","left","up","up","up"], "loops": true }
+  ]
+}

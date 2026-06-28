@@ -1,0 +1,22 @@
+{
+  "id": "room-13",
+  "name": "Wide Gate",
+  "width": 7,
+  "height": 3,
+  "start": { "row": 1, "column": 0 },
+  "exit":  { "row": 1, "column": 6 },
+  "echoBudget": 1,
+  "walls": [
+    { "row": 2, "column": 3 }
+  ],
+  "switches": [
+    { "id": "s1", "cell": { "row": 2, "column": 0 } }
+  ],
+  "doors": [
+    { "id": "d1", "cells": [ { "row": 0, "column": 3 }, { "row": 1, "column": 3 } ], "heldBy": ["s1"] }
+  ],
+  "hazards": [
+    { "id": "h1", "start": { "row": 1, "column": 4 },
+      "path": ["down","up","up","down"], "loops": true }
+  ]
+}
