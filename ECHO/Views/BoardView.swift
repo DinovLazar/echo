@@ -221,16 +221,16 @@ struct BoardView: View {
     }
 
     /// Walls: a full-cell rounded tile (1 pt inset so adjacent walls read separately)
-    /// with a top-light → bottom-dark gradient that gives just enough depth to read
-    /// as solid matter, not a drawn outline (§2.3).
+    /// filled with one flat solid tone — a calm, even block that reads as solid matter
+    /// rather than a drawn outline (Phase 2.07 / D-053 replaced the old top-light →
+    /// bottom-dark depth gradient with this single `wall` fill).
     private func walls(cell: CGFloat) -> some View {
         let inset = scaled(BoardMetrics.wallInset, cell: cell)
         let size = cell - inset * 2
         let radius = scaled(BoardMetrics.radiusWall, cell: cell)
         return ForEach(Array(state.walls), id: \.self) { wall in
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(LinearGradient(colors: [theme.wallTop, theme.wallBottom],
-                                     startPoint: .top, endPoint: .bottom))
+                .fill(theme.wall)
                 .frame(width: size, height: size)
                 .position(center(of: wall, cell: cell))
                 .allowsHitTesting(false)

@@ -15,10 +15,12 @@
 //  (the throwaway debug bar's *Invert* button just flips the seam for on-device
 //  verification, like *Next*/*Fold* — it is not the real setting).
 //
-//  Two accent colours only — red = danger, gold = goal — each always carried by an
-//  already-distinct shape, never the sole signal (D-041; handover §0). Geometry and
-//  glow/shadow metrics live in `BoardMetrics`; the named motion curves live in
-//  `Motion.swift`.
+//  Two **board** accent colours only — red = danger, gold = goal — each always carried
+//  by an already-distinct shape, never the sole signal (D-041; handover §0). A single
+//  UI-chrome success colour (`solvedGreen`, Phase 2.07 / D-055) also lives here, but it
+//  is confined to the in-room HUD's solved-*Next* button and never touches the board, so
+//  the board's strict two-accent discipline holds. Geometry and glow/shadow metrics live
+//  in `BoardMetrics`; the named motion curves live in `Motion.swift`.
 //
 //  Isolation: every type here is `nonisolated` (and `Sendable` where it holds
 //  state). The app target builds with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`
@@ -67,9 +69,9 @@ nonisolated struct Theme: Sendable {
     let paperBottom: Color
     let ink: Color
 
-    // Walls (top-light → bottom-dark gradient).
-    let wallTop: Color
-    let wallBottom: Color
+    // Walls — one flat solid tone (Phase 2.07 / D-053 replaced the old top-light →
+    // bottom-dark gradient pair with a single fill at the gradient's visual midpoint).
+    let wall: Color
 
     // Echoes — the base hue plus its two mode-specific opacities (handover §1b token
     // table gives Light 0.24/0.55; §4 prose gives Invert 0.22/0.50 — both honoured).
@@ -99,13 +101,19 @@ nonisolated struct Theme: Sendable {
     // (ink @ 0.22 light / near-black @ 0.40 invert — handover §1b/§4).
     let shadowColor: Color
 
+    // UI-chrome success colour (Phase 2.07 / D-055) — the solid fill the in-room HUD's
+    // *Next* button takes when a room is solved (the conventional "you may advance"
+    // green). This is the **only** place a third hue appears, and it is confined to UI
+    // chrome: it may never be drawn on the board or encode board meaning, so D-041's
+    // strict two-accent board discipline (red = danger, gold = goal) is preserved.
+    let solvedGreen: Color
+
     /// The Light palette (default).
     static let light = Theme(
         paperTop: Color(hex: 0xF5EDDD),
         paperBottom: Color(hex: 0xEADFCA),
         ink: Color(hex: 0x16130F),
-        wallTop: Color(hex: 0x3B3731),
-        wallBottom: Color(hex: 0x262320),
+        wall: Color(hex: 0x312D29),
         echoBase: Color(hex: 0x4A453E),
         echoFillOpacity: 0.24,
         echoStrokeOpacity: 0.55,
@@ -118,7 +126,8 @@ nonisolated struct Theme: Sendable {
         goalGlow: Color(hex: 0xC99A3A, opacity: 0.35),
         textGuidance: Color(hex: 0x5C5346),
         tileHairline: Color(hex: 0xC7BAA3),
-        shadowColor: Color(hex: 0x16130F, opacity: 0.22)
+        shadowColor: Color(hex: 0x16130F, opacity: 0.22),
+        solvedGreen: Color(hex: 0x5C8A52)
     )
 
     /// The Invert palette — a true warm white-on-black, not a dimmed copy; red and
@@ -128,8 +137,7 @@ nonisolated struct Theme: Sendable {
         paperTop: Color(hex: 0x1A1713),
         paperBottom: Color(hex: 0x0E0C0A),
         ink: Color(hex: 0xF2EBDD),
-        wallTop: Color(hex: 0x3A352E),
-        wallBottom: Color(hex: 0x23201B),
+        wall: Color(hex: 0x2F2B25),
         echoBase: Color(hex: 0xC9C1B2),
         echoFillOpacity: 0.22,
         echoStrokeOpacity: 0.50,
@@ -144,7 +152,10 @@ nonisolated struct Theme: Sendable {
         tileHairline: Color(hex: 0x332E27),
         // A deeper ambient shadow so the off-white player still lifts off near-black
         // paper (handover §4: "ink-on-dark @ 0.40").
-        shadowColor: Color(hex: 0x000000, opacity: 0.40)
+        shadowColor: Color(hex: 0x000000, opacity: 0.40),
+        // Brighter, warmer green so the solved-Next chrome stays legible on the dark
+        // sheet (mirrors how red/gold re-tune for Invert).
+        solvedGreen: Color(hex: 0x77B86A)
     )
 
     /// Resolve a `ThemeMode` to its palette. This is the seam 2.06 will drive from a

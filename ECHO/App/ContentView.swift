@@ -6,7 +6,7 @@
 //  real Phase 2.01 vertical gradient (paper.top → paper.bottom) from the `Theme`
 //  token layer — and composes the state-driven board on top. It owns the
 //  `GameState` and, from Phase 1.08, the ordered list of the ten teaching-room ids:
-//  it loads room 1 on launch and the throwaway debug bar's *Next* cycles through the
+//  it loads room 1 on launch and the in-room HUD's *Next* cycles through the
 //  rooms by building a fresh `GameState` from each level.
 //
 //  Phase 2.02 wired the colour-token system in; **Phase 2.06** gives the three switch
@@ -18,6 +18,14 @@
 //  temporary gear button that replaces the old debug *Invert* flip (the real menu is
 //  Part 3, D-037). It also owns a `GuidanceController` and notifies it of the active
 //  room on launch / `loadNextRoom` so the one-time hints fire (Phase 2.06).
+//
+//  **Phase 2.07** promotes the old throwaway debug strip into the real in-room HUD: a
+//  top strip (Settings gear · centred level number · turn/echoes readout) above the
+//  board, and a bottom row of real action buttons (Fold / Step back / Reset run / Clear
+//  / Next) in the reusable `ControlButtonStyle`. The *Next* button fills green when the
+//  room is solved. Three interim behaviours persist for Part 3 to replace (D-054): Clear
+//  is debug-only, Next is a debug room-cycle (not real Level-Select), and the controls
+//  still mutate `state` without gating on `BoardView`'s input lock (cosmetic only).
 //
 
 import SwiftUI
@@ -35,7 +43,7 @@ struct ContentView: View {
     @State private var roomIndex = 0
 
     /// The single source of truth for the board, owned here so both the board and
-    /// the debug bar act on the same model. Loaded from the first teaching room (with
+    /// the in-room HUD controls act on the same model. Loaded from the first teaching room (with
     /// a bare-board fallback if the resource can't be read, so the app never
     /// crashes on a missing/broken level).
     @State private var state = ContentView.makeState(forRoomAt: 0)
@@ -53,7 +61,7 @@ struct ContentView: View {
     /// on launch and on each `loadNextRoom` (D-052).
     @State private var guidance = GuidanceController()
 
-    /// Whether the Settings sheet is presented (from the debug bar's temporary gear).
+    /// Whether the Settings sheet is presented (from the top HUD's temporary gear).
     @State private var showingSettings = false
 
     /// The generative-audio manager (Phase 2.04), created here and `start()`-ed at
@@ -83,11 +91,13 @@ struct ContentView: View {
             LinearGradient(colors: [theme.paperTop, theme.paperBottom],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
-            // ...while the board + debug bar sit within the safe area.
+            // ...while the HUD + board + controls sit within the safe area, in reading
+            // order top-to-bottom: the top HUD strip, the board, the action row.
             VStack(spacing: 0) {
+                topHUD
                 BoardView(state: state, audio: audio, haptics: haptics,
                           showEchoTrail: settings.echoTrailEnabled, guidance: guidance)
-                debugBar
+                controlBar
             }
         }
         .environment(\.theme, theme)
@@ -135,55 +145,78 @@ struct ContentView: View {
         guidance.enterRoom(Self.roomIDs[roomIndex])
     }
 
-    // MARK: - Debug bar (TEMPORARY — remove in Parts 2–3)
+    // MARK: - In-room HUD (Phase 2.07)
 
-    /// Throwaway development controls, intentionally kept out of `BoardView` so the
-    /// board stays "just the board" and this strip is trivial to delete later. The
-    /// real in-room control layout and feel are Part 2/Part 3; these are grey-box.
+    /// The top HUD strip above the board (Phase 2.07 / D-054): three zones with the
+    /// level number truly centred regardless of the side widths. Leading: the Settings
+    /// **gear** — unchanged from Phase 2.06, it presents the real, persisted
+    /// `SettingsView` sheet (the only invert control now, plus sound / haptics /
+    /// echo-trail) and is still a temporary entry the Part 3 menu replaces (D-037).
+    /// Centre: the current level number (`roomIndex + 1`, 1–10). Trailing: the live
+    /// readout — the shared turn counter and the echo count against the room's budget.
+    /// Sits above the board, clear of the swipe/tap area, so it never intercepts input.
+    private var topHUD: some View {
+        ZStack {
+            // Centred level number — in its own layer so the side zones can't shift it.
+            Text("\(roomIndex + 1)")
+                .font(.footnote.monospacedDigit())
+                .foregroundStyle(theme.textGuidance)
+            HStack {
+                // Settings (gear) — a deliberate temporary that replaces the old debug
+                // *Invert* flip; presents the real, persisted Settings sheet. Removed
+                // with the HUD's interim behaviours when Part 3 builds the real menu.
+                Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+                    .frame(minWidth: 44, minHeight: 44)
+                Spacer()
+                Text("turn \(state.turn) · echoes \(state.echoes.count)/\(budgetText)")
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(theme.textGuidance)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+    }
+
+    /// The bottom action row (Phase 2.07 / D-054): the in-room controls as real buttons,
+    /// each in the one reusable `ControlButtonStyle`, dividing the strip into equal,
+    /// evenly-spaced shares. This layout + style is the **real in-room HUD spec** Part 3
+    /// reuses rather than rebuilds.
     ///
     /// *Fold* banks the current run as an echo and rewinds. *Step back* (Phase 1.07)
-    /// undoes one committed move of the current run (disabled at turn 0, where it is
-    /// a no-op anyway). *Reset run* (Phase 1.07) scraps the current attempt but
-    /// **keeps banked echoes** — the `restartRun()` op the death restart uses. *Clear*
-    /// wipes the room to pristine, **echoes and all** — a debug-only convenience,
-    /// deliberately distinct from *Reset run*. *Next* loads the next teaching room.
-    /// The **gear** (Phase 2.06) replaces the old debug *Invert* flip: it presents the
-    /// real, persisted `SettingsView` as a sheet (the only invert control now, plus
-    /// sound / haptics / echo-trail) — itself a temporary entry the Part 3 menu replaces.
-    /// The readout shows the shared turn counter and the live echo count against the
-    /// room's budget, plus a "Solved ✓" stand-in once the exit is reached (the real
-    /// win overlay is Part 3). It sits below the board, clear of the swipe/tap area,
-    /// so it never intercepts input.
+    /// undoes one committed move of the current run (disabled at turn 0, where it is a
+    /// no-op anyway, so it reads dimmed). *Reset run* (Phase 1.07) scraps the current
+    /// attempt but **keeps banked echoes** — the `restartRun()` op the death restart
+    /// uses. *Clear* wipes the room to pristine, **echoes and all** — a debug-only
+    /// convenience kept until Part 3 (D-054), deliberately distinct from *Reset run*.
+    /// *Next* loads the next teaching room — still a debug room-cycle, not the real
+    /// Level-Select (Part 3, D-037); when the room is solved it fills solid green
+    /// (`solvedGreen`) as the "you may advance" signal (D-055), replacing the old
+    /// "Solved ✓" text.
     ///
-    /// NOTE (Phase 2.03): these buttons mutate `state` **directly**, bypassing
+    /// NOTE (D-017/D-054): these buttons still mutate `state` **directly**, bypassing
     /// `BoardView`'s fold/death input lock (`commitMove` refuses input while an effect
-    /// plays). That is acceptable for this throwaway bar — pressing one mid-effect only
-    /// produces a cosmetic glitch (e.g. a phantom echo / a stale overlay), never an
-    /// invalid engine state. **The real in-room controls (Part 2/3) must gate on the
-    /// same `fold == nil && death == nil` lock**, since a death defers its restart
-    /// until the dissolve ends and must not be mutated out from under.
-    private var debugBar: some View {
-        HStack(spacing: 12) {
+    /// plays). That remains acceptable for this interim HUD — pressing one mid-effect
+    /// only produces a cosmetic glitch (e.g. a phantom echo / a stale overlay), never an
+    /// invalid engine state. **The real Part 3 controls must gate on the same
+    /// `fold == nil && death == nil` lock** (and wire real navigation), since a death
+    /// defers its restart until the dissolve ends and must not be mutated out from under.
+    private var controlBar: some View {
+        HStack(spacing: 8) {
             Button("Fold") { state.fold() }
             Button("Step back") { state.stepBack() }
                 .disabled(state.turn == 0)
             Button("Reset run") { state.restartRun() }
             Button("Clear") { state.clearEchoes() }
+            // *Next* turns solid green once the room is solved (D-055) — the green is
+            // confined to this one button's state and never reaches the board.
             Button("Next") { loadNextRoom() }
-            // The Settings (gear) entry — a deliberate temporary that replaces the old
-            // debug *Invert* flip; it presents the real, persisted Settings sheet (the
-            // only invert control now). Removed with the bar when Part 3 builds the menu.
-            Button { showingSettings = true } label: { Image(systemName: "gearshape") }
-            Spacer()
-            if state.hasWon {
-                Text("Solved ✓").fontWeight(.semibold)
-            }
-            Text("turn \(state.turn) · echoes \(state.echoes.count)/\(budgetText)")
-                .font(.footnote.monospacedDigit())
-                .foregroundStyle(theme.textGuidance)
+                .buttonStyle(state.hasWon
+                             ? ControlButtonStyle(prominentFill: theme.solvedGreen,
+                                                  prominentLabel: theme.paperTop)
+                             : ControlButtonStyle())
         }
-        .font(.footnote)
-        .padding(.horizontal, 24)
+        .buttonStyle(ControlButtonStyle())
+        .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
 

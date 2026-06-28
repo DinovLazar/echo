@@ -326,7 +326,7 @@
 - **Links:** Part 1 hotfix; D-013 (default-MainActor isolation), D-025 (CLT-only environment / blind-edit caution); `ECHO/Views/BoardView.swift` (`Diamond`).
 
 ### D-041 · 2026-06-26 · Two-accent colour language (red = danger, gold = goal)
-- **Status:** Accepted
+- **Status:** Accepted — partially superseded by D-055 (no-third-colour clause relaxed for UI chrome only)
 - **Context:** Plan §5 locked the board to ink/paper/grey with at most one optional muted accent reserved for the active goal. The Phase 2.01 visual handover (§0, §10) proposes two meaning-colours instead.
 - **Decision:** Adopt exactly two accent colours — red, used only for the enemy, and gold, used only for the active exit and a switch while it is holding the player alive. Each accent must always ride on an already-distinct shape (diamond for danger; ring / filled circle for goal) and may never be the sole differentiator; the handover's grayscale sanity pass (§3, §5) confirms every element keeps its identity with colour removed.
 - **Alternatives considered:** Keep the strict one-accent monochrome of Plan §5 — purer, but the single point of tension and the current aim are markedly less legible at a glance. Add more colours / colour-coded states — rejected; would break the calm monochrome character and risk encoding meaning in hue.
@@ -420,6 +420,30 @@
 - **Alternatives considered:** (a) Per-session one-time hints — a returning player would be re-taught the basics — rejected. (b) Implement a presentation-only refusal + shake for moving into an echo so the fifth string has a trigger — changes behaviour (currently a death) and pre-empts an unratified gameplay decision under a presentation-only part — rejected. (c) Caption only enemy deaths with `you got eaten` — leaves echo-deaths silent and inconsistent, with no echo-death string in the set — rejected; caption all deaths.
 - **Consequences:** The microcopy system ships complete in look and behaviour; one of the five designed strings and the §8.1 shake remain unwired until a future engine/gameplay phase settles block-vs-bite. `you got eaten` on an echo-death reads a hair oddly ("eaten" by yourself) but is the only available caption and keeps every death legibly captioned. Honest downside: none of the fades/placement are verifiable in the CLT-only env until the on-device pass.
 - **Links:** Phase 2.06; D-042 (the approved system), D-016/D-018/D-022 (echo/hazard contact = death), D-033 (room arc); handover §6/§7/§8.1; a future gameplay/engine phase (block-vs-bite + the deny visual).
+
+### D-053 · 2026-06-28 · Walls render as a flat solid fill (gradient removed)
+- **Status:** Accepted
+- **Context:** The Phase 2.01 handover (§2.3) gave walls a top-light→bottom-dark gradient for subtle depth; the owner wants flat walls, which is also what Plan §5 originally specified ("walls are solid").
+- **Decision:** Replace the `wallTop`/`wallBottom` gradient pair with a single `wall` colour token per palette (Light 0x312D29 / Invert 0x2F2B25 — the gradient's visual midpoint) and fill the wall tile flat.
+- **Alternatives considered:** Keep the gradient (handover §2.3) — rejected on owner preference; the flat fill reads cleaner and returns to the Plan §5 intent. Fill flat at `wallTop` or `wallBottom` instead of the midpoint — rejected; the midpoint preserves the current average tone exactly.
+- **Consequences:** Walls read as flat blocks; the slight 3-D depth the gradient gave is lost (acceptable — the calm look is the point). Token surface shrinks from two wall tokens to one.
+- **Links:** Phase 2.07; handover §2.3; Plan §5; D-041 (board palette).
+
+### D-054 · 2026-06-28 · The throwaway debug bar is promoted to the real in-room HUD layout
+- **Status:** Accepted
+- **Context:** D-017 built the in-room controls as an unstyled throwaway bar to be deleted and rebuilt in Part 3. The owner wants a real-feeling HUD now to play/test on device.
+- **Decision:** Restyle every control with one reusable `ButtonStyle` and re-lay-out into a top HUD strip (Settings gear leading · level number centred · turn/echoes readout trailing) plus a bottom row of action buttons (Fold / Step back / Reset run / Clear / Next). This layout + style is now the **real in-room HUD spec** Part 3 reuses rather than rebuilds.
+- **Alternatives considered:** Leave the throwaway text bar until Part 3 — rejected; the owner wants a finished-feeling HUD now and the layout work would just be redone. Build the full Part 3 controls now (real Level-Select, input-lock gating) — rejected; out of scope for a presentation phase.
+- **Consequences:** The bar is no longer "trivially deletable unstyled throwaway." Three interim behaviours from D-017 **persist and are still replaced in Part 3**: *Clear* (debug-only), *Next* (debug room-cycle, not Level-Select), and direct `state` mutation that bypasses the `fold == nil && death == nil` input lock (cosmetic-glitch-only). The real Part 3 controls must add the lock gate and real navigation (D-037).
+- **Links:** Phase 2.07; D-017; D-037.
+
+### D-055 · 2026-06-28 · Green "Next" button on solve — a UI-chrome success colour
+- **Status:** Accepted — **partially supersedes D-041** (the "no third accent" clause, for non-board UI only)
+- **Context:** The owner wants a clear "you can advance" signal when a room is solved; the conventional cue is a green "go" button. D-041 forbids any third accent — but D-041 governs **board** meaning-colours, and this is chrome.
+- **Decision:** When `state.hasWon`, the Next button fills green (`solvedGreen`: Light 0x5C8A52 / Invert 0x77B86A). Green is confined to **UI chrome** — one button's solved state — and may never appear on the board or encode board meaning. The board stays strictly two-accent (red/gold). The separate "Solved ✓" text is dropped (the green button is the signal).
+- **Alternatives considered:** Reuse `goalGold` (already "goal/done") for the solved-Next state — purer, keeps the app at two colours; rejected on owner preference for a conventional green, and gold remains a one-line swap if reconsidered. Keep no win-state colour — rejected; the owner wants an explicit advance signal.
+- **Consequences:** A third hue enters the app, but only as chrome on one button's state; D-041's board discipline is preserved. Exact green tuned on device.
+- **Links:** Phase 2.07; D-041.
 
 ---
 

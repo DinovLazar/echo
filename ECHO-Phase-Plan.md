@@ -31,6 +31,7 @@
 | 2.04 | Generative audio | Code | Per-move ticks that layer into a rhythm as echoes stack, via AVAudioEngine. **The signature feature.** |
 | 2.05 | Haptics | Code | Core Haptics mapping (selection / impact / error / success), pre-warmed, each paired with a visual change. |
 | 2.06 | Settings screen | Code (+ Design input) | Invert mode, sound toggle, haptics toggle, echo-trail aid toggle. |
+| 2.07 | In-room HUD & solid walls | Code | Promote the throwaway debug strip into the real in-room HUD: a top strip (Settings gear · centred level number · turn/echoes readout) and a bottom row of real action buttons in one reusable `ButtonStyle`; *Next* turns green on solve; walls render as a flat solid fill. Presentation only — the layout becomes the spec Part 3's real menu reuses. |
 
 **Part 2 milestone:** the game feels the way the design intends.
 
