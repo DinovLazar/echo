@@ -37,7 +37,7 @@
 - **Signing:** "Automatically manage signing" on; **no `DEVELOPMENT_TEAM` in the repo** — Xcode re-adds it to the working-tree `.pbxproj` on each build; leave it unstaged.
 - **Verification performed here (Command Line Tools only; `swiftc` 6.4 present, no Xcode):** the `ECHO` model module builds clean as an `-enable-testing` module; the real test files compile and the suite **runs green — 94/94 methods, 1419/1419 assertions** — against the real engine via the `swiftc` + `XCTest`-shim harness. All ten new room JSON files lint as valid JSON and decode through the real `Level` Decodable.
 - **NOT verified here (needs Lazar's physical iPhone + full Xcode):** the iOS Simulator/device build (**⌘R**), the in-Xcode **⌘U**, a real screenshot, and the runtime `Levels/` bundling (D-025 — the new rooms share this unconfirmed mechanism). **Still owed (carried from 1.02):** the exact **Xcode 27 / iOS SDK build numbers** — uncapturable here (no Xcode).
-- **Remote:** `origin` = `https://github.com/DinovLazar/echo` (public). **Branch:** Phase 3.01 work is on **`phase-3.01-campaign-rooms`**, cut from `main` (which already contains 2.02–2.07). Opened as a PR into `main`.
+- **Remote:** `origin` = `https://github.com/DinovLazar/echo` (public). **Branch:** Phase 3.01 work is on **`phase-3.01-campaign-rooms`**, cut from `main` (which already contains 2.02–2.07). feat commit **`7155498`**, PR **[echo#8](https://github.com/DinovLazar/echo/pull/8)** into `main`.
 
 ## Known issues / carried forward (still owed, not done)
 - **On-device build/run/test never performed:** the **⌘R** on the real iPhone and the in-Xcode **⌘U** have never run on the real game (only the headless harness equivalent). Owed on Lazar's device.

@@ -38,7 +38,7 @@ The game went from ten teaching rooms to a **full, hand-crafted twenty-room camp
   - New: `Levels/room-11.json` … `Levels/room-20.json` (ten campaign rooms).
   - Edited: `ECHO/App/ContentView.swift` (campaign `roomIDs` extended to `room-20` + doc comment); `ECHOTests/RoomSolvabilityTests.swift` (+10 solvability tests, +4 negative tests, hazard-trace test extended with `traceAt` + every new hazard).
   - Unchanged (verified): all of `ECHO/Models/` (the engine) and every other source/test file.
-  - Branch: `phase-3.01-campaign-rooms`; PR into `main`. (Commit hash recorded in the follow-up docs commit per repo convention.)
+  - Branch: `phase-3.01-campaign-rooms`; feat commit **`7155498`**; PR **[echo#8](https://github.com/DinovLazar/echo/pull/8)** into `main`.
 - **Docs:** `ECHO-Decisions.md` (+D-056, D-052 status line); `_project-state/current-state.md` (overwritten to 20-room reality); `_project-state/file-map.md` (Levels + ContentView + test-suite entries); this completion report.
 - **Design:** none (this is content authoring; no new UI, so no design handover).
 - **Ops / manual:** none. No secrets; repo stays team-less (`DEVELOPMENT_TEAM` unstaged).
