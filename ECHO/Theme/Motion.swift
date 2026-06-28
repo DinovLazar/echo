@@ -76,6 +76,9 @@ nonisolated enum Motion {
     static let deathFizz = Curve.easeOut(0.320)
     /// `motion.trailReveal` — `200 ms`, `curve.easeOut` (per-dot stagger handled at the call site).
     static let trailReveal = Curve.easeOut(0.200)
+    /// The echo-trail's toggle-off fade — `150 ms`, `curve.easeIn` (handover §6f). Used
+    /// when the aid is switched off, before the dots stop rendering (Phase 2.06).
+    static let trailFadeOut = Curve.easeIn(0.150)
     /// `motion.denyShake` — `260 ms`, `curve.decayShake`.
     static let denyShake = Curve.decayShake
     /// `motion.guidanceIn` — `200 ms`, `curve.easeOut`.
@@ -115,6 +118,22 @@ extension Motion {
         /// death beats begin — the project never teleports a piece (Plan §5). The
         /// death-specific beats above keep their own §6d numbers.
         static let step: TimeInterval = 0.120
+
+        // --- Phase 2.06: echo-trail fade + guidance microcopy (§6f / §6) ---
+
+        /// `motion.trailReveal`/off as raw seconds. The toggle-off fade length the
+        /// echo-trail layer holds for before it stops rendering (§6f, 150 ms easeIn).
+        static let trailFade: TimeInterval = 0.150
+
+        /// The guidance microcopy fade-in / fade-out lengths as raw seconds, so the
+        /// overlay (which times its linger with `Task.sleep`, not a baked `Animation`)
+        /// reads the same §6 numbers the `Motion.guidanceIn`/`guidanceOut` curves use.
+        static let guidanceIn: TimeInterval = 0.200
+        static let guidanceOut: TimeInterval = 0.350
+        /// `motion.guidanceLingerHint` — one-time hints hold for 2200 ms (§6).
+        static let guidanceLingerHint: TimeInterval = 2.2
+        /// `motion.guidanceLingerFeedback` — recurring feedback holds for 1600 ms (§6).
+        static let guidanceLingerFeedback: TimeInterval = 1.6
     }
 }
 

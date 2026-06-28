@@ -9,12 +9,15 @@
 //  it loads room 1 on launch and the throwaway debug bar's *Next* cycles through the
 //  rooms by building a fresh `GameState` from each level.
 //
-//  Phase 2.02 wires the colour-token system in: this view owns the active
-//  `ThemeMode` (the **single internal switch point** 2.06 will bind to a real,
-//  persisted user toggle) and injects the resolved palette into the environment so
-//  `BoardView` reads it. There is no Settings UI or persistence this phase; the
-//  debug bar's *Invert* button just flips the seam in place so both palettes can be
-//  verified on device — it is a throwaway debug control, not the real setting.
+//  Phase 2.02 wired the colour-token system in; **Phase 2.06** gives the three switch
+//  points (the `\.theme` palette seam, `audio.isEnabled`, `haptics.isEnabled`) a real,
+//  persisted home. This view now owns a `SettingsStore` (the single source of truth for
+//  invert / sound / haptics / echo-trail, over `UserDefaults`) and derives the palette
+//  from `settings.invertEnabled`, keeps the two managers in sync with their toggles, and
+//  passes the echo-trail flag into `BoardView`. The Settings screen is reached via a
+//  temporary gear button that replaces the old debug *Invert* flip (the real menu is
+//  Part 3, D-037). It also owns a `GuidanceController` and notifies it of the active
+//  room on launch / `loadNextRoom` so the one-time hints fire (Phase 2.06).
 //
 
 import SwiftUI
@@ -37,10 +40,21 @@ struct ContentView: View {
     /// crashes on a missing/broken level).
     @State private var state = ContentView.makeState(forRoomAt: 0)
 
-    /// The active palette mode — **the one internal switch point** a later Settings
-    /// phase (2.06) will replace with a binding to a persisted user preference.
-    /// Defaults to Light; the throwaway debug *Invert* button flips it.
-    @State private var themeMode: ThemeMode = .light
+    /// The persisted user preferences (Phase 2.06) — the single source of truth for the
+    /// four toggles (invert / sound / haptics / echo-trail), backed by `UserDefaults`.
+    /// Owned here, mirroring `audio`/`haptics`; the three already-built switch points
+    /// (the `\.theme` seam, `audio.isEnabled`, `haptics.isEnabled`) are now driven from
+    /// it, and `SettingsView` edits it. Relaunch restores the last state (D-050/D-051).
+    @State private var settings = SettingsStore()
+
+    /// The guidance-microcopy controller (Phase 2.06) — owns the current on-board
+    /// message and the one-time-hint seen-once persistence. Owned here and injected into
+    /// `BoardView` like `audio`/`haptics`; `ContentView` notifies it of the active room
+    /// on launch and on each `loadNextRoom` (D-052).
+    @State private var guidance = GuidanceController()
+
+    /// Whether the Settings sheet is presented (from the debug bar's temporary gear).
+    @State private var showingSettings = false
 
     /// The generative-audio manager (Phase 2.04), created here and `start()`-ed at
     /// launch so the first tick has no spin-up latency, then kept for the session.
@@ -57,9 +71,11 @@ struct ContentView: View {
     /// this phase. A safe no-op on hardware without haptics and in the Simulator.
     @State private var haptics = HapticsManager()
 
-    /// The resolved palette for this mode. Owned here (not read from the environment)
-    /// because this view is what *provides* the environment value to its children.
-    private var theme: Theme { Theme.make(themeMode) }
+    /// The resolved palette, derived from the persisted Invert preference (Phase 2.06).
+    /// Owned here (not read from the environment) because this view is what *provides*
+    /// the environment value to its children; reading `settings.invertEnabled` here is
+    /// what flips the whole board live when the Settings toggle changes.
+    private var theme: Theme { Theme.make(settings.invertEnabled ? .invert : .light) }
 
     var body: some View {
         ZStack {
@@ -69,7 +85,8 @@ struct ContentView: View {
                 .ignoresSafeArea()
             // ...while the board + debug bar sit within the safe area.
             VStack(spacing: 0) {
-                BoardView(state: state, audio: audio, haptics: haptics)
+                BoardView(state: state, audio: audio, haptics: haptics,
+                          showEchoTrail: settings.echoTrailEnabled, guidance: guidance)
                 debugBar
             }
         }
@@ -77,10 +94,24 @@ struct ContentView: View {
         .tint(theme.ink)
         // Pre-warm at launch (idempotent; no-ops in previews / where unsupported), so
         // the first tick and the first tap fire with no spin-up latency. Both are kept
-        // for the session.
+        // for the session. The managers are initialised to the persisted preferences
+        // first (so a disabled toggle never pre-warms), and the launch room's one-time
+        // hint is fired (room-01 → `swipe to move`, if not seen before).
         .task {
+            audio.isEnabled = settings.soundEnabled
+            haptics.isEnabled = settings.hapticsEnabled
             audio.start()
             haptics.prepare()
+            guidance.enterRoom(Self.roomIDs[roomIndex])
+        }
+        // Keep the two managers in sync with the live toggles.
+        .onChange(of: settings.soundEnabled) { _, on in audio.isEnabled = on }
+        .onChange(of: settings.hapticsEnabled) { _, on in haptics.isEnabled = on }
+        // The Settings screen (temporary gear entry; the real menu is Part 3). Re-inject
+        // the palette so the sheet matches the board and flips live with the Invert toggle.
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(settings: settings, onClose: { showingSettings = false })
+                .environment(\.theme, theme)
         }
     }
 
@@ -96,10 +127,12 @@ struct ContentView: View {
         return GameState()
     }
 
-    /// Advance to the next teaching room (wrapping), loading it fresh.
+    /// Advance to the next teaching room (wrapping), loading it fresh, and notify the
+    /// guidance controller so the room's one-time hint fires if it hasn't been seen.
     private func loadNextRoom() {
         roomIndex = (roomIndex + 1) % Self.roomIDs.count
         state = Self.makeState(forRoomAt: roomIndex)
+        guidance.enterRoom(Self.roomIDs[roomIndex])
     }
 
     // MARK: - Debug bar (TEMPORARY — remove in Parts 2–3)
@@ -114,8 +147,9 @@ struct ContentView: View {
     /// **keeps banked echoes** — the `restartRun()` op the death restart uses. *Clear*
     /// wipes the room to pristine, **echoes and all** — a debug-only convenience,
     /// deliberately distinct from *Reset run*. *Next* loads the next teaching room.
-    /// *Invert* flips the palette (Phase 2.02) so both Light and Invert can be checked
-    /// on device — a throwaway debug control, **not** the real Settings toggle (2.06).
+    /// The **gear** (Phase 2.06) replaces the old debug *Invert* flip: it presents the
+    /// real, persisted `SettingsView` as a sheet (the only invert control now, plus
+    /// sound / haptics / echo-trail) — itself a temporary entry the Part 3 menu replaces.
     /// The readout shows the shared turn counter and the live echo count against the
     /// room's budget, plus a "Solved ✓" stand-in once the exit is reached (the real
     /// win overlay is Part 3). It sits below the board, clear of the swipe/tap area,
@@ -136,9 +170,10 @@ struct ContentView: View {
             Button("Reset run") { state.restartRun() }
             Button("Clear") { state.clearEchoes() }
             Button("Next") { loadNextRoom() }
-            Button(themeMode == .light ? "Invert" : "Light") {
-                themeMode = (themeMode == .light) ? .invert : .light
-            }
+            // The Settings (gear) entry — a deliberate temporary that replaces the old
+            // debug *Invert* flip; it presents the real, persisted Settings sheet (the
+            // only invert control now). Removed with the bar when Part 3 builds the menu.
+            Button { showingSettings = true } label: { Image(systemName: "gearshape") }
             Spacer()
             if state.hasWon {
                 Text("Solved ✓").fontWeight(.semibold)

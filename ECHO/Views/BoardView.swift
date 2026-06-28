@@ -61,6 +61,19 @@ struct BoardView: View {
     /// Presentation-only; gated by its own `isEnabled` switch; passed in for symmetry.
     let haptics: HapticsManager
 
+    /// Whether the optional echo-trail aid is on (Phase 2.06). Passed in by
+    /// `ContentView` as `settings.echoTrailEnabled` — an additive parameter exactly like
+    /// `audio`/`haptics` were. When on, a faint dotted preview of each echo's upcoming
+    /// path is drawn beneath the player; the aid reads existing echo intent only and
+    /// changes no gameplay (D-051; handover §8/§6f).
+    let showEchoTrail: Bool
+
+    /// The guidance microcopy controller (Phase 2.06), owned by `ContentView` and
+    /// injected like `audio`/`haptics`. `BoardView` mounts `GuidanceOverlay` to render
+    /// its current `message`, and fires `showEaten()` from its death path. Presentation
+    /// only — it adds no engine state (D-052; handover §6).
+    let guidance: GuidanceController
+
     /// The active palette (Light by default; `ContentView` injects it). The single
     /// switch point a later Settings phase (2.06) will bind to a user toggle.
     @Environment(\.theme) private var theme
@@ -86,6 +99,12 @@ struct BoardView: View {
     @State private var foldGeneration = 0
     @State private var deathGeneration = 0
 
+    /// Whether the echo-trail layer is in the view tree. It mounts the instant the aid
+    /// is switched on and stays mounted for the 150 ms fade after it is switched off
+    /// (so the dots can fade rather than vanish), then unmounts — so when the aid is off
+    /// at rest nothing is rendered (handover §6f). Driven by the `.task(id: showEchoTrail)`.
+    @State private var trailMounted = false
+
     /// Board occupies this fraction of the smaller available dimension, leaving a
     /// margin from the safe-area edges.
     private static let fillFraction: CGFloat = 0.82
@@ -109,6 +128,12 @@ struct BoardView: View {
                 doorBars(cell: cell)
                 switchMarks(cell: cell)
                 echoes(cell: cell)
+                // The optional echo-trail aid (Phase 2.06): a faint dotted preview of
+                // each echo's upcoming path, beneath the player and hit-testing off.
+                // Mounted only while on (or fading off), so off = nothing rendered.
+                if trailMounted {
+                    echoTrail(cell: cell)
+                }
                 hazardMarks(cell: cell)
                 playerSquare(cell: cell)
                 // The transient fold/death choreography, on top of the steady board.
@@ -119,6 +144,15 @@ struct BoardView: View {
                         .frame(width: boardSize.width, height: boardSize.height)
                         .allowsHitTesting(false)
                 }
+                // The guidance microcopy (Phase 2.06), anchored to the board above the
+                // pieces (hit-testing off). Renders the controller's current message;
+                // self-times its own fade.
+                GuidanceOverlay(message: guidance.message,
+                                boardSize: boardSize,
+                                placeUpper: state.player.row >= state.height * 2 / 3,
+                                color: theme.textGuidance)
+                    .frame(width: boardSize.width, height: boardSize.height)
+                    .allowsHitTesting(false)
             }
             .frame(width: boardSize.width, height: boardSize.height)
             // Centre the board within the available (safe-area) space.
@@ -145,6 +179,17 @@ struct BoardView: View {
                 let total = Motion.Span.step + Motion.Span.deathFreeze + Motion.Span.deathFizz
                 try? await Task.sleep(for: .seconds(total))
                 if !Task.isCancelled { finishDeath() }
+            }
+            // Echo-trail mount/unmount. On → mount immediately (the layer fades its dots
+            // in with the per-dot reveal stagger). Off → keep the layer mounted for the
+            // 150 ms fade, then unmount so nothing renders at rest (handover §6f).
+            .task(id: showEchoTrail) {
+                if showEchoTrail {
+                    trailMounted = true
+                } else if trailMounted {
+                    try? await Task.sleep(for: .seconds(Motion.Span.trailFade))
+                    if !Task.isCancelled { trailMounted = false }
+                }
             }
         }
     }
@@ -307,6 +352,55 @@ struct BoardView: View {
                 .opacity(dissolving || peeling ? 0 : 1)
                 .allowsHitTesting(false)
         }
+    }
+
+    /// The echo-trail aid (Phase 2.06; handover §8/§6f): per echo, a faint line of
+    /// dots running from the echo's current cell centre through the centres of the
+    /// cells it is about to enter (the pure `Echo.upcomingCells`). Dots are `3 pt`,
+    /// centre-spaced `8 pt`, in `echo.base` @ 0.40 (both palettes). An exhausted echo
+    /// has no upcoming path, so it shows no dots. Drawn beneath the player, hit-testing
+    /// off; the aid reads existing intent only and changes no gameplay.
+    private func echoTrail(cell: CGFloat) -> some View {
+        let dotSize = scaled(BoardMetrics.trailDotSize, cell: cell)
+        let spacing = scaled(BoardMetrics.trailDotSpacing, cell: cell)
+        return ForEach(state.echoes) { echo in
+            let upcoming = echo.upcomingCells(start: state.start, turn: state.turn)
+            if !upcoming.isEmpty {
+                // Polyline = the echo's current cell centre, then each upcoming centre.
+                let points = ([state.position(of: echo)] + upcoming)
+                    .map { center(of: $0, cell: cell) }
+                EchoTrailLayer(dots: trailDots(along: points, spacing: spacing),
+                               dotSize: dotSize,
+                               color: theme.echoBase,
+                               active: showEchoTrail)
+            }
+        }
+    }
+
+    /// Resample a polyline (points already in board pixels) into evenly-spaced dots,
+    /// one every `spacing` points, ordered outward from the echo (the order drives the
+    /// reveal stagger). The first dot sits one `spacing` out from the echo centre, so
+    /// the line reads as emanating from the echo rather than sitting under it.
+    private func trailDots(along points: [CGPoint], spacing: CGFloat) -> [TrailDot] {
+        guard points.count >= 2, spacing > 0 else { return [] }
+        var dots: [TrailDot] = []
+        var order = 0
+        var carry = spacing                       // distance until the next dot
+        for i in 1..<points.count {
+            let a = points[i - 1], b = points[i]
+            let dx = b.x - a.x, dy = b.y - a.y
+            let length = (dx * dx + dy * dy).squareRoot()
+            if length == 0 { continue }
+            var distance = carry
+            while distance <= length {
+                let t = distance / length
+                dots.append(TrailDot(id: order, point: CGPoint(x: a.x + dx * t, y: a.y + dy * t)))
+                order += 1
+                distance += spacing
+            }
+            carry = distance - length
+        }
+        return dots
     }
 
     /// Hazards: a red diamond — the only diamond on the board — with a darker
@@ -584,6 +678,11 @@ struct BoardView: View {
     /// If a future mechanic ever made an echo move off the player's cadence, this
     /// would need the swap branch too; until then it is complete.
     private func triggerDeath(previous: GridCoordinate, contact: GridCoordinate) {
+        // The recurring death caption (handover §6 / §8.2), fading in over the §6d
+        // freeze frame. The only failure caption in the designed set, so it captions
+        // every death dissolve — an echo touch or a hazard touch alike (D-052).
+        guidance.showEaten()
+
         let deathTurn = state.turn + 1
         let collidingEchoes = state.echoes.filter {
             $0.position(start: state.start, turn: deathTurn) == contact
@@ -629,6 +728,49 @@ private struct Squash {
     var across: CGFloat = 1
 }
 
+/// One dot of an echo-trail line. `id` is the dot's order outward from the echo, which
+/// both keys it in the `ForEach` and drives its reveal stagger (Phase 2.06).
+private struct TrailDot: Identifiable {
+    let id: Int
+    let point: CGPoint
+}
+
+/// One echo's upcoming-path dots, with the §6f reveal/fade behaviour. Kept as its own
+/// view (one per echo) so each owns a `revealed` state: the dots reveal outward from
+/// the echo with an `8 ms`-per-dot stagger on appear, hold while `active`, and fade
+/// over `150 ms` `curve.easeIn` when the aid is switched off (`active` → false) before
+/// `BoardView` unmounts the layer. Hit-testing off; purely a read of echo intent.
+private struct EchoTrailLayer: View {
+    let dots: [TrailDot]
+    let dotSize: CGFloat
+    /// The `echo.base` hue; the dot opacity (`opacity.trailDot` = 0.40) is applied here.
+    let color: Color
+    /// Whether the aid is on. When it flips to `false` the dots fade out.
+    let active: Bool
+
+    /// Flips true on appear to drive the staggered reveal (an initial mount does not
+    /// animate, so the appearance is what the reveal animation keys off).
+    @State private var revealed = false
+
+    var body: some View {
+        ZStack {
+            ForEach(dots) { dot in
+                Circle()
+                    .fill(color)
+                    .frame(width: dotSize, height: dotSize)
+                    .position(dot.point)
+                    .opacity(revealed && active ? BoardMetrics.trailDotOpacity : 0)
+                    // Reveal (per-dot stagger) when turning on; plain easeIn fade when off.
+                    .animation(active ? Motion.trailReveal.delay(Double(dot.id) * 0.008)
+                                      : Motion.trailFadeOut,
+                               value: revealed && active)
+            }
+        }
+        .allowsHitTesting(false)
+        .onAppear { revealed = true }
+    }
+}
+
 private extension View {
     /// The handover's `glow.accent` (blur 8, spread 2 around the shape) approximated
     /// with two stacked colour shadows — a soft halo that renders *outside* the shape
@@ -649,13 +791,15 @@ private extension View {
 }
 
 #Preview("Light") {
-    BoardView(state: GameState(), audio: AudioManager(), haptics: HapticsManager())
+    BoardView(state: GameState(), audio: AudioManager(), haptics: HapticsManager(),
+              showEchoTrail: false, guidance: GuidanceController())
         .environment(\.theme, .light)
         .background(Color(hex: 0xF5EDDD))
 }
 
 #Preview("Invert") {
-    BoardView(state: GameState(), audio: AudioManager(), haptics: HapticsManager())
+    BoardView(state: GameState(), audio: AudioManager(), haptics: HapticsManager(),
+              showEchoTrail: false, guidance: GuidanceController())
         .environment(\.theme, .invert)
         .background(Color(hex: 0x141210))
 }

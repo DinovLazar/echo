@@ -200,6 +200,12 @@ nonisolated enum BoardMetrics {
     static let doorOpenRemnant: Double = 0.22  // open-door stub opacity
     static let exitDefaultRing: Double = 0.55  // ink ring opacity when not the active goal
 
+    // Echo-trail aid (Phase 2.06; handover §8/§1b). The optional dotted upcoming-path
+    // preview. Same `echo.base` token + opacity in both palettes (handover §8).
+    static let trailDotSize: CGFloat = 3       // dot diameter
+    static let trailDotSpacing: CGFloat = 8    // centre-to-centre spacing along the path
+    static let trailDotOpacity: Double = 0.40  // `opacity.trailDot`
+
     // Player drop shadow (colour/opacity is in `Theme.shadowColor`).
     static let shadowBlur: CGFloat = 6
     static let shadowOffsetY: CGFloat = 2
