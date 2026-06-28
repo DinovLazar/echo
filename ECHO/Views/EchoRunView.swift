@@ -17,12 +17,13 @@
 //  frozen board, then `finishDeath()` commits the move (finalizing `isOver`/`score`),
 //  saves the high score through `SettingsStore`, and reveals the game-over panel.
 //
-//  Interim UI (Plan §4 screens 6–7; the polished overlay is Phase 3.03). The entry into
-//  this screen, the top bar, and the game-over panel are all deliberately minimal and
-//  clearly marked — they are replaced by the real Title / Main Menu / game-over overlay
-//  in Phase 3.03 (D-017/D-026/D-054 lineage). Self-contained: it provides its own paper
-//  background and an `onExit` way back to the campaign, so the whole mode is removable
-//  cleanly when the real menu lands.
+//  Phase 3.03 (Navigation shell) wires the real flow (D-059): Echo Run is now entered
+//  from the Main Menu, the top-bar chevron and the game-over "Main menu" both route back
+//  to it via `onMainMenu`, and the interim game-over panel is replaced by the real
+//  game-over overlay (the turns-survived score as the dominant number, "best N" / "new
+//  best!", then Retry → `EchoRunState.reset()` and Main menu). The arcade board, the
+//  deferred-death dissolve, and `EchoRunState` are unchanged — only the game-over and the
+//  exit routing changed. Self-contained: it provides its own paper background.
 //
 
 import SwiftUI
@@ -40,9 +41,9 @@ struct EchoRunView: View {
     /// The shared haptics manager (already pre-warmed by `ContentView`) — a light tick on
     /// each committed turn, the soft error on a catch.
     let haptics: HapticsManager
-    /// Return to the campaign board (interim entry's counterpart). Replaced by the real
-    /// menu navigation in Phase 3.03.
-    let onExit: () -> Void
+    /// Leave Echo Run for the Main Menu — the top-bar chevron and the game-over "Main
+    /// menu" both call this (Phase 3.03 / D-059). The root performs the fade.
+    let onMainMenu: () -> Void
 
     @Environment(\.theme) private var theme
 
@@ -89,16 +90,15 @@ struct EchoRunView: View {
 
     // MARK: - Top bar (interim)
 
-    /// The interim score strip: a back chevron (exit to the campaign), the live score
-    /// centred, and the best so far trailing. Clearly throwaway — the real header is
-    /// Phase 3.03. Sits above the board, clear of the swipe area.
+    /// The score strip: a back chevron (→ Main Menu), the live score centred, and the
+    /// best so far trailing. Sits above the board, clear of the swipe area.
     private var topBar: some View {
         ZStack {
             Text("\(state.score)")
                 .font(.title2.monospacedDigit().weight(.semibold))
                 .foregroundStyle(theme.ink)
             HStack {
-                Button { onExit() } label: { Image(systemName: "chevron.left") }
+                Button { onMainMenu() } label: { Image(systemName: "chevron.left") }
                     .frame(minWidth: 44, minHeight: 44)
                 Spacer()
                 Text("best \(settings.echoRunHighScore)")
@@ -227,35 +227,38 @@ struct EchoRunView: View {
             .allowsHitTesting(false)
     }
 
-    // MARK: - Game over (interim)
+    // MARK: - Game over
 
-    /// The interim game-over panel — a scrim over the frozen board with the run's score,
-    /// the best (or "new best!"), and an instant Retry plus an Exit. Deliberately minimal
-    /// and clearly marked; the polished overlay is Phase 3.03.
+    /// The real game-over overlay (Phase 3.03 / D-059): over the frozen, dimmed arcade
+    /// board, a small centred panel with the turns-survived score as the dominant number,
+    /// "best N" (or "new best!" when this run set it) beneath, then Retry → `reset()` and
+    /// Main menu → `onMainMenu`. Same restraint as the campaign win overlay — no fanfare.
     private var gameOverPanel: some View {
         ZStack {
-            theme.paperBottom.opacity(0.55).ignoresSafeArea()
-            VStack(spacing: 16) {
-                Text("the echoes caught you")
-                    .font(.headline)
-                    .foregroundStyle(theme.ink)
+            theme.paperBottom.opacity(0.55)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())   // capture taps so the frozen board behind is inert
+            VStack(spacing: 18) {
                 VStack(spacing: 4) {
-                    Text("score \(state.score)")
-                        .font(.title.monospacedDigit().weight(.semibold))
+                    Text("\(state.score)")
+                        .font(.system(size: 56, weight: .semibold).monospacedDigit())
                         .foregroundStyle(theme.ink)
                     Text(lastRunWasBest ? "new best!" : "best \(settings.echoRunHighScore)")
                         .font(.footnote.monospacedDigit())
-                        .foregroundStyle(lastRunWasBest ? theme.goalGold : theme.textGuidance)
+                        // Chrome-success green for a new best (D-055), not the board's goal
+                        // gold; paired with the "new best!" text change so it is never the
+                        // only cue.
+                        .foregroundStyle(lastRunWasBest ? theme.solvedGreen : theme.textGuidance)
                 }
                 HStack(spacing: 8) {
                     Button("Retry") { retry() }
                         .buttonStyle(ControlButtonStyle(prominentFill: theme.ink,
                                                         prominentLabel: theme.paperTop))
-                    Button("Exit") { onExit() }
+                    Button("Main menu") { onMainMenu() }
                         .buttonStyle(ControlButtonStyle())
                 }
             }
-            .padding(24)
+            .padding(28)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(theme.paperTop)
@@ -379,12 +382,12 @@ private struct RunSquash {
 
 #Preview("Light") {
     EchoRunView(settings: SettingsStore(), audio: AudioManager(), haptics: HapticsManager(),
-                onExit: {})
+                onMainMenu: {})
         .environment(\.theme, .light)
 }
 
 #Preview("Invert") {
     EchoRunView(settings: SettingsStore(), audio: AudioManager(), haptics: HapticsManager(),
-                onExit: {})
+                onMainMenu: {})
         .environment(\.theme, .invert)
 }

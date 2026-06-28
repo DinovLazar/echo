@@ -88,14 +88,14 @@ final class SettingsGuidanceTrailTests: XCTestCase {
         XCTAssertNil(GuidanceHint.forRoom("not-a-room"))
     }
 
-    /// The five strings are reproduced verbatim (exact casing/punctuation), including
-    /// the one that ships unwired (D-052).
+    /// The four designed strings are reproduced verbatim (exact casing/punctuation). The
+    /// fifth, unwired `blockedByGhost` string was removed in Phase 3.03 (D-056
+    /// follow-through), so it is no longer asserted.
     func testGuidanceStringsAreVerbatim() {
         XCTAssertEqual(GuidanceHint.swipeToMove.text, "swipe to move")
         XCTAssertEqual(GuidanceHint.foldToKeepDoorOpen.text, "fold to keep the door open")
         XCTAssertEqual(GuidanceHint.bewareItBites.text, "beware — it bites")
         XCTAssertEqual(GuidanceFeedback.eaten, "you got eaten")
-        XCTAssertEqual(GuidanceFeedback.blockedByGhost, "you can't go there — your ghost is")
     }
 
     // MARK: - GuidanceController: seen-once gate

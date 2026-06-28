@@ -74,6 +74,17 @@ struct BoardView: View {
     /// only — it adds no engine state (D-052; handover §6).
     let guidance: GuidanceController
 
+    /// Optional outward report of this view's input lock (Phase 3.03 / D-059). The board
+    /// already refuses input while a fold or death choreography plays (`commitMove`'s
+    /// `fold == nil, death == nil` guard); this reports that same lock to a parent so the
+    /// **out-of-board** campaign controls (Fold / Step back / Reset run, owned by
+    /// `RoomView`) can honor it too instead of mutating `state` directly mid-effect — the
+    /// correctness cleanup the interim HUD deferred (D-017/D-054). Additive and presentation
+    /// only, in the same vein as `audio`/`haptics`/`guidance` were added in earlier phases;
+    /// it changes nothing the board draws. Left `nil` (the default) by call sites that
+    /// don't need it (e.g. previews), so the board's behaviour is unchanged when unused.
+    var inputLock: Binding<Bool>? = nil
+
     /// The active palette (Light by default; `ContentView` injects it). The single
     /// switch point a later Settings phase (2.06) will bind to a user toggle.
     @Environment(\.theme) private var theme
@@ -164,6 +175,12 @@ struct BoardView: View {
             // it; so none of those false-trigger.)
             .onChange(of: state.echoes.count) { old, new in
                 if new > old { triggerFold() }
+            }
+            // Report the fold/death input lock outward (Phase 3.03 / D-059) so the
+            // out-of-board campaign controls can gate on the same lock `commitMove` uses.
+            // A pure side report — it never feeds back into the board's own state.
+            .onChange(of: fold != nil || death != nil) { _, locked in
+                inputLock?.wrappedValue = locked
             }
             // Clear each effect once it has fully played. Keyed on the generation so a
             // new event cancels the previous timer; the model restart a death needs is

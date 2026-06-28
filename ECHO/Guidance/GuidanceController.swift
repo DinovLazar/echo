@@ -9,23 +9,20 @@
 //  feeds); this type stays Foundation-only so its room→hint mapping and its
 //  seen-once gate are pure and unit-testable headlessly.
 //
-//  Five strings, two timing categories (D-042/D-052; handover §6):
+//  Four strings, two timing categories (D-042/D-052; handover §6):
 //    • One-time hints (linger 2200 ms) — shown **once ever** the first time the
 //      situation is relevant; a returning player is never re-taught (persisted in
 //      `UserDefaults`). `swipe to move` / `fold to keep the door open` /
 //      `beware — it bites`, mapped to room-01 / room-03 / room-06 (D-033 arc).
 //    • Recurring feedback (linger 1600 ms) — shown **every time** it happens.
-//      `you got eaten` is wired to every death dissolve. `you can't go there — your
-//      ghost is` ships in the set but is **left unwired** this phase: its trigger is a
-//      *refused* move into an echo, which needs the still-open block-vs-bite gameplay
-//      rule (touching an echo is currently a death, not a refusal — D-016/D-018), an
-//      engine decision out of this presentation-only part (D-052).
+//      `you got eaten` is wired to every death dissolve.
 //
-//  Ownership mirrors the managers (D-050): `ContentView` owns this (`@State`) and tells
-//  it the active room on launch and on each `loadNextRoom`; `BoardView` reads `message`
-//  through the injected reference and fires `showEaten()` from its death path.
-//  `@MainActor @Observable` like the other owned services; `UserDefaults` injectable so
-//  the seen-once gate is testable in isolation.
+//  Ownership mirrors the managers (D-050): `ContentView` owns this (`@State`) and shares
+//  it with the board; the active room is announced on room entry (Phase 3.03: `RoomView`
+//  calls `enterRoom` when a room screen appears). `BoardView` reads `message` through the
+//  injected reference and fires `showEaten()` from its death path. `@MainActor
+//  @Observable` like the other owned services; `UserDefaults` injectable so the seen-once
+//  gate is testable in isolation.
 //
 
 import Foundation
@@ -69,11 +66,6 @@ nonisolated enum GuidanceFeedback {
     /// The only failure caption in the designed set — fired on **every** death
     /// dissolve, echo or hazard alike (D-052).
     static let eaten = "you got eaten"
-    /// Ships in the string set but is **unwired** this phase: its trigger is a refused
-    /// move into an echo, which depends on the unresolved block-vs-bite gameplay rule
-    /// (D-052). Kept here as the fifth designed string, verbatim, so a future
-    /// engine/gameplay phase can wire it (and the §8.1 deny-shake) with no new copy.
-    static let blockedByGhost = "you can't go there — your ghost is"
 }
 
 /// Whether a message holds for the one-time-hint linger or the recurring-feedback

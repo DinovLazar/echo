@@ -23,6 +23,14 @@
 //  (D-058): a stored `Int` (default 0) plus `recordEchoRunScore(_:)`, the keep-the-best
 //  comparison the arcade mode calls on death. The `Bool` preference shape is unchanged.
 //
+//  Phase 3.03 adds the **solved-rooms set** — the campaign save data Level Select reads
+//  to mark solved rooms and write on a win (D-061). It rides this same wrapper too (one
+//  persistence system, exactly as the high score did — not a second store): the solved
+//  subset of `Campaign.roomIDs` (the existing `String` room identifier) persisted as a
+//  `[String]` under one key, exposed as `markSolved(_:)` / `isSolved(_:)` and the
+//  `solvedRooms` read accessor. The four `Bool` preferences and the high score are
+//  unchanged.
+//
 //  Persistence shape: each preference is a stored `Bool` loaded from its key in `init`
 //  (with the documented default when the key is absent) and written back through a
 //  `didSet`, so there is one in-memory source of truth that is mirrored to
@@ -49,6 +57,7 @@ final class SettingsStore {
         static let haptics = "settings.hapticsEnabled"
         static let echoTrail = "settings.echoTrailEnabled"
         static let echoRunHighScore = "echoRun.highScore"
+        static let solvedRooms = "campaign.solvedRooms"
     }
 
     /// Invert palette. Default **false** — Light is the default palette (D-050).
@@ -67,6 +76,13 @@ final class SettingsStore {
     /// preferences above; updated via `recordEchoRunScore(_:)`.
     var echoRunHighScore: Int { didSet { defaults.set(echoRunHighScore, forKey: Key.echoRunHighScore) } }
 
+    /// The campaign rooms the player has solved (the solved subset of `Campaign.roomIDs`).
+    /// Default **empty** — a fresh save has nothing solved (Phase 3.03 / D-061). Persisted
+    /// as a `[String]` through this same wrapper rather than a separate save file (one
+    /// persistence system, like the high score — D-058). Read by Level Select; written
+    /// only through `markSolved(_:)` so a redundant write is avoided (`private(set)`).
+    private(set) var solvedRooms: Set<String> { didSet { defaults.set(Array(solvedRooms), forKey: Key.solvedRooms) } }
+
     /// The backing store. Not observed (it is plumbing, not state); injectable so tests
     /// can use an isolated suite.
     @ObservationIgnored private let defaults: UserDefaults
@@ -81,6 +97,7 @@ final class SettingsStore {
         self.hapticsEnabled = defaults.object(forKey: Key.haptics) as? Bool ?? true
         self.echoTrailEnabled = defaults.object(forKey: Key.echoTrail) as? Bool ?? false
         self.echoRunHighScore = defaults.object(forKey: Key.echoRunHighScore) as? Int ?? 0
+        self.solvedRooms = Set(defaults.stringArray(forKey: Key.solvedRooms) ?? [])
     }
 
     /// Record an Echo Run score, keeping it only if it beats the stored best. Returns
@@ -92,5 +109,20 @@ final class SettingsStore {
         guard score > echoRunHighScore else { return false }
         echoRunHighScore = score
         return true
+    }
+
+    // MARK: - Campaign solved-rooms (Phase 3.03 / D-061)
+
+    /// Whether `roomID` has been solved.
+    func isSolved(_ roomID: String) -> Bool {
+        solvedRooms.contains(roomID)
+    }
+
+    /// Record `roomID` as solved (called when the player reaches a room's exit).
+    /// Idempotent: marking an already-solved room is a no-op and never writes again, so
+    /// re-solving a room costs nothing and never re-fires observers.
+    func markSolved(_ roomID: String) {
+        guard !solvedRooms.contains(roomID) else { return }
+        solvedRooms.insert(roomID)
     }
 }
