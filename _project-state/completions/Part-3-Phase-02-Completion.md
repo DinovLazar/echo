@@ -37,7 +37,7 @@ None of substance. The board defaulted to **9×9 / centre** with no ±1 adjustme
 - **Code (new):** `ECHO/Models/EchoRunState.swift`, `ECHO/Views/EchoRunView.swift`, `ECHOTests/EchoRunTests.swift`.
 - **Code (additive edits):** `ECHO/Settings/SettingsStore.swift` (`echoRunHighScore` + `recordEchoRunScore`), `ECHO/App/ContentView.swift` (interim Echo Run entry + `body` mode switch).
 - **Docs:** `ECHO-Decisions.md` (+D-057, +D-058); `_project-state/current-state.md` (overwritten to 3.02); `_project-state/file-map.md` (new files + edits + the corrected 3.01 line); `_project-state/00_stack-and-config.md` (Phase 3.02 section — no dependency change).
-- **Branch / commit / PR:** branch `phase-3.02-echo-run`; feat commit `<hash recorded in a follow-up docs commit>`; PR into `main` — `<URL recorded after open>`.
+- **Branch / commit / PR:** branch `phase-3.02-echo-run`; feat commit `82e93b0`; PR into `main` — [echo#9](https://github.com/DinovLazar/echo/pull/9). *(This docs commit recording the hash + PR is the only change after the feat commit, matching the repo's 3.01 pattern.)*
 - **Design / Ops:** none (no handover for this code phase; no secrets).
 
 ## 6. State updates done (code phases)
