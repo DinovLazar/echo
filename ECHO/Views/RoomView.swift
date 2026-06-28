@@ -50,14 +50,25 @@ struct RoomView: View {
     /// Mirrors `BoardView`'s fold/death input lock so the out-of-board controls honour it
     /// (D-059). `BoardView` writes it through the `inputLock` binding.
     @State private var inputLocked = false
-    /// Whether the win overlay is showing (set when `state.hasWon` flips true).
+    /// Whether the win overlay is showing (set a beat after `state.hasWon` flips true).
     @State private var showWin = false
+    /// Whether a "Next room" advance is in flight: an opaque paper cover is veiling the
+    /// solved board so the room can swap behind it without the incoming board flashing
+    /// through the outgoing win scrim (D-064 artifact 1).
+    @State private var advancing = false
+
+    /// A short beat after the winning step before the win overlay animates in, so the
+    /// solved board reads for a moment first (D-064 artifact 2). First-guess value —
+    /// tune on device.
+    private static let winRevealDelay: TimeInterval = 0.45
+    /// How long the opaque paper cover takes to veil the solved board before the room
+    /// swaps on "Next room" (D-064 artifact 1). Reuses the ~200 ms navigation-fade feel;
+    /// a named first-guess constant — tune on device.
+    private static let advanceCoverFade: Animation = Motion.guidanceIn
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [theme.paperTop, theme.paperBottom],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
+            paperField
             VStack(spacing: 0) {
                 topHUD
                 BoardView(state: state, audio: audio, haptics: haptics,
@@ -68,17 +79,39 @@ struct RoomView: View {
             if showWin {
                 winOverlay
             }
+            // The advance cover (D-064 artifact 1): an opaque paper field raised over the
+            // solved board + win scrim the instant "Next room" is tapped, BEFORE the room
+            // swaps, so the incoming board never shows behind the still-fading outgoing
+            // scrim during the root crossfade. The same paper as the room background, so
+            // the swap reads as a clean fade through blank paper.
+            if advancing {
+                paperField.transition(.opacity)
+            }
         }
+        // Developer-only frame-rate readout, gated out of release (D-063). No-op shipped.
+        .debugPerformanceOverlay()
         // Fire this room's one-time guidance hint when the screen appears (once per room —
         // the screen has a fresh identity per room, D-052).
         .task { guidance.enterRoom(roomID) }
-        // Reaching the exit alive flips `hasWon`: mark the room solved and reveal the win
-        // overlay on a soft fade.
-        .onChange(of: state.hasWon) { _, won in
-            guard won else { return }
+        // Reaching the exit alive flips `hasWon`: mark the room solved immediately, then
+        // hold a short beat (D-064 artifact 2) so the solved board reads before the win
+        // overlay animates in. `.task(id:)` runs MainActor-isolated and auto-cancels if
+        // the room changes out from under the delay.
+        .task(id: state.hasWon) {
+            guard state.hasWon, !showWin else { return }
             settings.markSolved(roomID)
+            try? await Task.sleep(for: .seconds(Self.winRevealDelay))
+            guard !Task.isCancelled else { return }
             withAnimation(Motion.guidanceIn) { showWin = true }
         }
+    }
+
+    /// The room's paper background — also reused as the opaque cover during a "Next room"
+    /// advance so the two read identically (D-064).
+    private var paperField: some View {
+        LinearGradient(colors: [theme.paperTop, theme.paperBottom],
+                       startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea()
     }
 
     // MARK: - Top HUD
@@ -169,12 +202,27 @@ struct RoomView: View {
     private func buttons(next: String?) -> some View {
         HStack(spacing: 8) {
             if let next {
-                Button("Next room") { onAdvance(next) }
+                Button("Next room") { advance(to: next) }
                     .buttonStyle(ControlButtonStyle(prominentFill: theme.solvedGreen,
                                                     prominentLabel: theme.paperTop))
             }
             Button("Level select") { onLevelSelect() }
                 .buttonStyle(ControlButtonStyle())
+        }
+    }
+
+    /// Advance to the next room with the outgoing board hidden first (D-064 artifact 1):
+    /// raise the opaque paper cover, then swap rooms only once it is fully opaque, so the
+    /// root crossfade dissolves an opaque paper field into the new board — never the
+    /// outgoing board behind the win scrim. The `advancing` guard makes this idempotent —
+    /// a fast double-tap on "Next room" can't re-fire `onAdvance` while the cover rises
+    /// (mirroring the control row's own re-entry guards).
+    private func advance(to next: String) {
+        guard !advancing else { return }
+        withAnimation(Self.advanceCoverFade) {
+            advancing = true
+        } completion: {
+            onAdvance(next)
         }
     }
 

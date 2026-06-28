@@ -86,6 +86,9 @@ struct EchoRunView: View {
                 gameOverPanel
             }
         }
+        // Developer-only frame-rate readout, gated out of release (D-063). Echo Run's
+        // stacked shadows are the worst case for frame timing, so it mounts here too.
+        .debugPerformanceOverlay()
     }
 
     // MARK: - Top bar (interim)
