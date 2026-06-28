@@ -36,7 +36,7 @@ The four design preferences finally have a real home: a **Settings screen** (rea
 ## 5. Changed files / deliverables
 - **Code (new):** `ECHO/Settings/SettingsStore.swift`, `ECHO/Settings/SettingsView.swift`, `ECHO/Guidance/GuidanceController.swift`, `ECHO/Guidance/GuidanceOverlay.swift`, `ECHOTests/SettingsGuidanceTrailTests.swift`.
 - **Code (edited, additive / presentation-only):** `ECHO/App/ContentView.swift` (owns `SettingsStore` + `GuidanceController`; derives palette from settings; manager sync; gear + sheet; `enterRoom`), `ECHO/Views/BoardView.swift` (echo-trail layer + `GuidanceOverlay` + `showEaten` on death; two new injected params), `ECHO/Models/Echo.swift` (additive `upcomingCells`), `ECHO/Theme/Theme.swift` (additive trail tokens), `ECHO/Theme/Motion.swift` (additive `trailFadeOut` + guidance/trail `Span`s).
-- **Branch / PR / commit:** branch `phase-2.06-settings` (from the 2.05 tip `d968e84`); commit hash + PR URL recorded in a follow-up docs commit.
+- **Branch / PR / commit:** branch `phase-2.06-settings` (from the 2.05 tip `d968e84`); feat commit **`9d0f2a1`**; PR **[echo#6](https://github.com/DinovLazar/echo/pull/6)** into `main`. (This docs line was added in a follow-up commit recording the hash + PR.)
 - **Design:** implements `docs/design-handovers/Part-2-Phase-01-Handover.md` §6 (typography + guidance) and §8 (echo-trail aid); reads §0/§1a/§1b/§7. No new handover authored.
 - **Ops / manual:** none. No secrets. The `DEVELOPMENT_TEAM` line Xcode writes on build is left unstaged.
 
