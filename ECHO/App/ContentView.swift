@@ -68,6 +68,12 @@ struct ContentView: View {
     /// Whether the Settings sheet is presented (from the top HUD's temporary gear).
     @State private var showingSettings = false
 
+    /// Whether the temporary Echo Run arcade mode is showing (Phase 3.02). Interim, in
+    /// the same throwaway lineage as the debug controls (D-017/D-026/D-054): the real
+    /// Main Menu that hosts both modes is Phase 3.03. Removing this `@State`, the top
+    /// HUD's entry button, and the `body` branch deletes the mode in one edit.
+    @State private var showEchoRun = false
+
     /// The generative-audio manager (Phase 2.04), created here and `start()`-ed at
     /// launch so the first tick has no spin-up latency, then kept for the session.
     /// Passed into `BoardView`, which fires its sounds from the same step/fold/death
@@ -90,6 +96,26 @@ struct ContentView: View {
     private var theme: Theme { Theme.make(settings.invertEnabled ? .invert : .light) }
 
     var body: some View {
+        Group {
+            // INTERIM (Phase 3.02): switch to the throwaway Echo Run arcade mode, entered
+            // from the top HUD's temporary button and returned from via `onExit`. The real
+            // Main Menu that hosts both modes is Phase 3.03; deleting `showEchoRun`, the
+            // entry button, and this branch removes the mode in one edit (D-017/D-026/D-054).
+            if showEchoRun {
+                EchoRunView(settings: settings, audio: audio, haptics: haptics,
+                            onExit: { showEchoRun = false })
+            } else {
+                campaignScreen
+            }
+        }
+        .environment(\.theme, theme)
+        .tint(theme.ink)
+    }
+
+    /// The campaign board screen — the in-room HUD, the board, and the action row.
+    /// Unchanged by Echo Run except that it is now one branch of `body` (the temporary
+    /// arcade mode is the other).
+    private var campaignScreen: some View {
         ZStack {
             // Paper stays full-bleed (under the notch and home indicator)...
             LinearGradient(colors: [theme.paperTop, theme.paperBottom],
@@ -104,8 +130,6 @@ struct ContentView: View {
                 controlBar
             }
         }
-        .environment(\.theme, theme)
-        .tint(theme.ink)
         // Pre-warm at launch (idempotent; no-ops in previews / where unsupported), so
         // the first tick and the first tap fire with no spin-up latency. Both are kept
         // for the session. The managers are initialised to the persisted preferences
@@ -165,11 +189,16 @@ struct ContentView: View {
             Text("\(roomIndex + 1)")
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(theme.textGuidance)
-            HStack {
+            HStack(spacing: 4) {
                 // Settings (gear) — a deliberate temporary that replaces the old debug
                 // *Invert* flip; presents the real, persisted Settings sheet. Removed
                 // with the HUD's interim behaviours when Part 3 builds the real menu.
                 Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+                    .frame(minWidth: 44, minHeight: 44)
+                // INTERIM (Phase 3.02): the throwaway entry into Echo Run, the arcade
+                // survival mode. Same lineage as the gear / debug controls (D-017/D-026/
+                // D-054) — replaced by the real Main Menu in Phase 3.03.
+                Button { showEchoRun = true } label: { Image(systemName: "infinity") }
                     .frame(minWidth: 44, minHeight: 44)
                 Spacer()
                 Text("turn \(state.turn) · echoes \(state.echoes.count)/\(budgetText)")

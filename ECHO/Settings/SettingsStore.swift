@@ -18,6 +18,11 @@
 //  haptics **on**, echo-trail **off** (a clean board is the resting look — the trail is
 //  an opt-in clarity aid).
 //
+//  Phase 3.02 adds the **Echo Run high score** — the designated second `UserDefaults`
+//  value (Plan §6). It rides this same wrapper rather than a second persistence system
+//  (D-058): a stored `Int` (default 0) plus `recordEchoRunScore(_:)`, the keep-the-best
+//  comparison the arcade mode calls on death. The `Bool` preference shape is unchanged.
+//
 //  Persistence shape: each preference is a stored `Bool` loaded from its key in `init`
 //  (with the documented default when the key is absent) and written back through a
 //  `didSet`, so there is one in-memory source of truth that is mirrored to
@@ -43,6 +48,7 @@ final class SettingsStore {
         static let sound = "settings.soundEnabled"
         static let haptics = "settings.hapticsEnabled"
         static let echoTrail = "settings.echoTrailEnabled"
+        static let echoRunHighScore = "echoRun.highScore"
     }
 
     /// Invert palette. Default **false** — Light is the default palette (D-050).
@@ -54,6 +60,12 @@ final class SettingsStore {
     /// The echo-trail aid. Default **false** — an opt-in clarity aid; a clean board is
     /// the resting look (D-051).
     var echoTrailEnabled: Bool { didSet { defaults.set(echoTrailEnabled, forKey: Key.echoTrail) } }
+
+    /// The best Echo Run score so far (turns survived). Default **0** — the designated
+    /// second `UserDefaults` value (Plan §6 / Phase 3.02), persisted through this same
+    /// wrapper rather than a separate store (D-058). Written through on change like the
+    /// preferences above; updated via `recordEchoRunScore(_:)`.
+    var echoRunHighScore: Int { didSet { defaults.set(echoRunHighScore, forKey: Key.echoRunHighScore) } }
 
     /// The backing store. Not observed (it is plumbing, not state); injectable so tests
     /// can use an isolated suite.
@@ -68,5 +80,17 @@ final class SettingsStore {
         self.soundEnabled = defaults.object(forKey: Key.sound) as? Bool ?? true
         self.hapticsEnabled = defaults.object(forKey: Key.haptics) as? Bool ?? true
         self.echoTrailEnabled = defaults.object(forKey: Key.echoTrail) as? Bool ?? false
+        self.echoRunHighScore = defaults.object(forKey: Key.echoRunHighScore) as? Int ?? 0
+    }
+
+    /// Record an Echo Run score, keeping it only if it beats the stored best. Returns
+    /// whether it was a new high score (so the game-over screen can mark it). The single
+    /// persistence point for the arcade high score — the arcade engine stays pure and
+    /// the view calls this on death (D-058).
+    @discardableResult
+    func recordEchoRunScore(_ score: Int) -> Bool {
+        guard score > echoRunHighScore else { return false }
+        echoRunHighScore = score
+        return true
     }
 }
