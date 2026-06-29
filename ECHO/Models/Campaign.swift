@@ -21,18 +21,20 @@
 //  builds with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` (D-013).
 //
 
-/// The campaign's twenty rooms and the pure order/identity helpers over them. There is
+/// The campaign's rooms and the pure order/identity helpers over them. There is
 /// **no unlock gating** (D-060): every room is always selectable; `firstUnsolved` only
 /// drives the Level-Select accent hint, never a lock.
 nonisolated enum Campaign {
-    /// The full campaign in play order: the ten teaching rooms (Phase 1.08) followed by
-    /// the ten Part-3 campaign rooms (Phase 3.01). Index `i` ⇒ display number `i + 1`.
-    /// This is the one ordering; everything else derives from it.
+    /// The full campaign in play order: the ten teaching rooms (Phase 1.08), the ten
+    /// Part-3 campaign rooms (Phase 3.01), and the Part-4 "strategic / relocating echo"
+    /// band (rooms 21–25, Phase 4.02 — the wait action's payoff; D-069). Index `i` ⇒
+    /// display number `i + 1`. This is the one ordering; everything else derives from it.
     static let roomIDs: [String] = [
         "room-01", "room-02", "room-03", "room-04", "room-05",
         "room-06", "room-07", "room-08", "room-09", "room-10",
         "room-11", "room-12", "room-13", "room-14", "room-15",
         "room-16", "room-17", "room-18", "room-19", "room-20",
+        "room-21", "room-22", "room-23", "room-24", "room-25",
     ]
 
     /// Whether `id` is a real campaign room.

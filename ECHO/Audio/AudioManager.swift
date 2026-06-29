@@ -232,6 +232,7 @@ final class AudioManager {
     /// byte-identical every run, matching the engine's no-randomness character.
     private func buildSoundBank() {
         buildStepTicks()
+        buildWaitTick()
         buildFold()
         buildDeath()
         buildSolve()
@@ -261,6 +262,24 @@ final class AudioManager {
             renderTone(into: buffer, baseFrequency: frequency, partials: partials, peak: peak)
             stepBuffers[direction] = buffer
         }
+    }
+
+    /// The wait tick (Phase 4.01 / D-067) — the voice of a `.stay`. A low, quiet, calm
+    /// note that sits *under* the four-tone pentatonic step set: C3, a full octave below
+    /// the lowest step tick (C4 / down), with a softer, duller voicing (a longer-decaying
+    /// fundamental and only a faint second harmonic — no bright "pock" partial), so a held
+    /// turn reads as a quiet breath in the rhythm rather than a step. Stored in the same
+    /// `stepBuffers` map keyed on `.stay`, so a wait's turn layers with any stepping
+    /// echoes' ticks as one chord through the existing `playStep(directions:)` path
+    /// (an echo replaying a recorded wait voices this same calm note). Tunable by ear.
+    private func buildWaitTick() {
+        let calm = [
+            Partial(multiple: 1.0, amplitude: 1.00, tau: 0.26),   // soft, longer-decaying fundamental
+            Partial(multiple: 2.0, amplitude: 0.12, tau: 0.10),   // a faint harmonic for body
+        ]
+        let buffer = makeBuffer(seconds: 0.34)
+        renderTone(into: buffer, baseFrequency: 130.81, partials: calm, peak: 0.10)   // C3 — quiet, under the set
+        stepBuffers[.stay] = buffer
     }
 
     /// Fold: a warm, slightly lower two-note settle (G3 → a perfect fifth down to C3),

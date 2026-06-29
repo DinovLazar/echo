@@ -33,7 +33,7 @@ struct LevelSelectView: View {
 
     @Environment(\.theme) private var theme
 
-    /// Four equal columns → the 4×5 grid over the twenty rooms.
+    /// Four equal columns; the grid flows over all `Campaign.roomIDs` (25 as of Phase 4.02).
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: 4)
 
     var body: some View {

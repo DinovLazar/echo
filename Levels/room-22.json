@@ -1,0 +1,28 @@
+{
+  "id": "room-22",
+  "name": "Two Relays",
+  "width": 10,
+  "height": 5,
+  "start": { "row": 2, "column": 1 },
+  "exit":  { "row": 2, "column": 9 },
+  "echoBudget": 2,
+  "walls": [
+    { "row": 0, "column": 2 }, { "row": 0, "column": 4 }, { "row": 0, "column": 6 }, { "row": 0, "column": 8 },
+    { "row": 1, "column": 2 }, { "row": 1, "column": 4 }, { "row": 1, "column": 6 }, { "row": 1, "column": 8 },
+    { "row": 3, "column": 2 }, { "row": 3, "column": 4 }, { "row": 3, "column": 6 }, { "row": 3, "column": 8 },
+    { "row": 4, "column": 2 }, { "row": 4, "column": 4 }, { "row": 4, "column": 6 }, { "row": 4, "column": 8 }
+  ],
+  "switches": [
+    { "id": "s1", "cell": { "row": 0, "column": 0 } },
+    { "id": "s2", "cell": { "row": 1, "column": 1 } },
+    { "id": "s3", "cell": { "row": 4, "column": 0 } },
+    { "id": "s4", "cell": { "row": 3, "column": 1 } }
+  ],
+  "doors": [
+    { "id": "d1", "cells": [ { "row": 2, "column": 2 } ], "heldBy": ["s1"] },
+    { "id": "d2", "cells": [ { "row": 2, "column": 4 } ], "heldBy": ["s2"] },
+    { "id": "d3", "cells": [ { "row": 2, "column": 6 } ], "heldBy": ["s3"] },
+    { "id": "d4", "cells": [ { "row": 2, "column": 8 } ], "heldBy": ["s4"] }
+  ],
+  "hazards": []
+}

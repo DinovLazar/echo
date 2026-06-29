@@ -517,6 +517,46 @@
 - **Consequences:** A cleaner solve→advance transition; two new tuned constants in one place. **Honest downside:** the exact pre-delay and scrim timing only read right *on device* — the committed values are first guesses to confirm in the device pass (the same "flagged for the on-device feel pass" pattern as D-043/D-044). Presentation-only; no engine/route/collision/win change.
 - **Links:** Phase 3.04; D-059 (the navigation model + the carried artifacts); D-062.
 
+### D-065 · 2026-06-29 · Open Part 4 — post-launch campaign expansion (20 → 36 rooms) across three new mechanics
+- **Status:** Accepted
+- **Context:** The campaign is code-complete at 20 rooms (room 20 "Coda" is the finale). The owner wants harder rooms and genuinely new complexity — strategic, *relocating* echoes; a two-region **teleport**; a "you exist in both halves at once" **mirror** — plus a hard bonus finale.
+- **Decision:** Open **Part 4**, growing the campaign to **36 rooms** in staged bands, each new mechanic shipped as its own engine phase and *proven before* the rooms that use it: **21–25** hold-then-relocate echoes; **26–30** add teleport; **31–35** add mirror; **36** a bonus finale stacking mirror **and** teleport. Enemies feature in some rooms across all bands. Rooms **25 / 30 / 35** are oversized hard capstones; **room 35 becomes the campaign finale** (room 20 "Coda" stops being the ending), with **36 as a bonus** beyond it. Room 36's recorded spec: **three connected maps — two mirrored halves plus a third reachable only by a teleport pad on one of the mirrored maps; four echoes; six or more teleport pads; two enemies** — the hardest room in the game.
+- **Alternatives considered:** Keep the campaign at 20 (rejected — owner wants more). Only ~10 new rooms, one new mechanic (rejected — owner expanded to 16 rooms + two mechanics). Build all rooms first, mechanics later (rejected — content can't precede the engine it needs; each band is gated).
+- **Consequences:** The largest body of new work in the project — three stacked engine changes (wait, teleport, mirror) on a base that has **never run on a real device** — and the hardest authoring/verification yet. **Honest downsides:** (a) room 36 stacks two mechanics, which is a genuine **mirror×teleport interaction** that must be defined (what happens when a two-bodied mirrored entity hits a teleport pad) — given its own rules-sketch + engine phase (4.07) before it is built (4.08); (b) device-verification debt (D-062) grows with each engine change until the on-device pass — strong intent is to play each new mechanic on the phone as it lands. `Campaign.roomIDs` grows from 20 to 36 across the content phases.
+- **Links:** `ECHO-Phase-Plan.md` (Part 4); D-062 (device debt); D-057 (Echo Run stall); D-033 (original arc, not superseded); D-066, D-069.
+
+### D-066 · 2026-06-29 · The wait action — `GameState.wait()` (a pass-the-turn move; a wait can be fatal)
+- **Status:** Accepted
+- **Context:** Holding a switch *for a while* then relocating — the core of every Part-4 "strategic echo" room — is impossible without passing a turn in place. The campaign has no wait; it faked one with "stall-pockets" (bobbing into an empty cell and back), which forced geometry hacks (D-038, D-039) and still can't keep an echo *on* a switch across turns.
+- **Decision:** Add `GameState.wait()`: advance the shared turn by one, record a stay, leave the player put, then run the **same** collision check as a move — so a mover stepping onto the waiting player is a **death** (run restarts). Refused only while won (symmetry with `move`/`stepBack`); reset/step-back/fold all handle runs containing waits; a wait never checks the exit.
+- **Alternatives considered:** Keep faking with stall-pockets (rejected — clunky, forces a pocket into the geometry, and can't dwell *on* a switch). A wait that skips its collision check (rejected — a mover walking into a stationary player must kill them, like any land-on; "holding position is risky" is good, honest tension).
+- **Consequences:** Dwell-then-relocate becomes expressible; the stall-pocket workaround is retired **for new rooms** (rooms 05/09 keep theirs). **Honest downside:** waiting can now kill you (intended), and it's a new player-facing action to learn — taught by room 21 and its guidance.
+- **Links:** D-038 / D-039; D-057; D-018 / D-022 / D-023; D-065; D-067; D-068.
+
+### D-067 · 2026-06-29 · A wait is stored as a fifth `Direction` case (`.stay`, zero offset) — not a new `Move` type
+- **Status:** Accepted
+- **Context:** A recorded run is `[Direction]` everywhere (`currentRun`, `Echo.moves`, `stepBack`'s replay, `fold`, `Echo.position`, which walks each move by `offset`). Representing a wait needs a "stay" element.
+- **Decision:** Add `case stay` (offset `(0,0)`) to `Direction`. `currentRun`/`Echo.moves`/`stepBack`/`fold`/`Echo.position` keep their exact types and logic (a `.stay` advances the index without moving), so the verified test suite needs **no migration**. The tap initializer never produces `.stay`; the audio map and anything assuming four directions gain a `.stay` case.
+- **Alternatives considered:** A `Move` enum `{ step(Direction); wait }` replacing `[Direction]` (conceptually cleaner — **rejected**: re-types the run and ripples through the entire verified engine + ~140-method suite for a cosmetic gain). A `[Direction?]` sentinel (rejected — hacky).
+- **Consequences:** Minimal disturbance to the verified engine and near-zero migration. **Honest downsides:** `.stay` isn't literally a "direction" (a documented pragmatic stretch); `Direction.allCases` grows by one; and because `Hazard.path` decodes `[Direction]`, a hazard path could now technically contain `"stay"` (a harmless, unused pausing-patrol capability — the locked schema, D-024, is otherwise unchanged and no room uses it).
+- **Links:** D-066; D-024; D-046; D-014.
+
+### D-068 · 2026-06-29 · The wait is issued by an explicit "Wait" control in the room HUD
+- **Status:** Accepted
+- **Context:** The player needs a way to trigger a wait. The campaign currently treats a swipe into a wall/edge as a no-op.
+- **Decision:** Add a fourth **Wait** button to the room control row (Fold / Step back / Reset run / **Wait**), wired through the same input-lock-guarded path, calling `state.wait()`. Enabled whenever input is unlocked (not disabled at turn 0).
+- **Alternatives considered:** Adopt Echo Run's edge-swipe stall in the campaign (rejected — hidden/undiscoverable for a core planning tool, and it would change the campaign's no-op-on-blocked-swipe behaviour). A gesture/long-press (rejected — less discoverable).
+- **Consequences:** Waiting is explicit and discoverable; the control row goes from three to four equal-width buttons. **Honest downside:** one more on-screen button (acceptable — the row already divides evenly).
+- **Links:** D-066; D-054 (the HUD + `ControlButtonStyle`); D-059 (the input-lock path).
+
+### D-069 · 2026-06-29 · Rooms 21–25 — the "strategic / relocating echo" lesson arc
+- **Status:** Accepted
+- **Context:** Part 4's first content band introduces the wait action's payoff — an echo that holds a switch, then relocates — and must continue the difficulty curve past room 20 (already budget-3, two patrols, a multi-cell AND-door).
+- **Decision:** Five escalating rooms: **21 "Relay"** (one echo holds A, waits, moves to B; **budget 1** — one self, two jobs); **22 "Two Relays"** (two relocating echoes coordinated; budget 2); **23 "Patrol & Relay"** (a relocate + one patrol; budget 2; enemies enter here); **24 "Hold & Hand-off"** (an AND-door + a relocate hand-off; budget 2–3); **25 "Clockwork"** (oversized hard capstone — multiple relocating echoes, an AND-door, **two enemies**, tight budget). Enemies appear from room 23. Each ships a solvability test; biting rooms (≥ 23, 25) ship a negative test too.
+- **Alternatives considered:** Fewer/looser rooms (rejected — teaches the new idea less cleanly). Front-loading the hard capstone (rejected — the band should ramp to the milestone 25).
+- **Consequences:** A clean ramp for the new mechanic and a milestone capstone. Exact cell layouts and verified solutions are Code's to author (Chat sets the arc/intent; Code authors + verifies, adjusting geometry/budget minimally if a room won't solve — the D-038/D-039 precedent). The campaign catalog grows to 25; **room 25 is the band capstone, not the campaign finale** (that becomes room 35 — D-065).
+- **Links:** D-033 / D-034; D-035; D-036; D-038 / D-039; D-065; D-066.
+
 ---
 
 ### Decision-log conventions

@@ -1,0 +1,35 @@
+{
+  "id": "room-25",
+  "name": "Clockwork",
+  "width": 11,
+  "height": 7,
+  "start": { "row": 3, "column": 1 },
+  "exit":  { "row": 3, "column": 10 },
+  "echoBudget": 3,
+  "walls": [
+    { "row": 0, "column": 2 }, { "row": 0, "column": 5 }, { "row": 0, "column": 8 },
+    { "row": 1, "column": 2 }, { "row": 1, "column": 5 }, { "row": 1, "column": 8 },
+    { "row": 2, "column": 2 }, { "row": 2, "column": 5 }, { "row": 2, "column": 8 },
+    { "row": 4, "column": 2 }, { "row": 4, "column": 5 }, { "row": 4, "column": 8 },
+    { "row": 5, "column": 2 }, { "row": 5, "column": 5 }, { "row": 5, "column": 8 },
+    { "row": 6, "column": 2 }, { "row": 6, "column": 5 }, { "row": 6, "column": 8 }
+  ],
+  "switches": [
+    { "id": "sA", "cell": { "row": 1, "column": 0 } },
+    { "id": "sB", "cell": { "row": 5, "column": 0 } },
+    { "id": "sC", "cell": { "row": 3, "column": 0 } },
+    { "id": "sD", "cell": { "row": 0, "column": 1 } },
+    { "id": "sE", "cell": { "row": 6, "column": 1 } }
+  ],
+  "doors": [
+    { "id": "dAND", "cells": [ { "row": 3, "column": 2 } ], "heldBy": ["sA", "sB", "sC"] },
+    { "id": "dD", "cells": [ { "row": 3, "column": 5 } ], "heldBy": ["sD"] },
+    { "id": "dE", "cells": [ { "row": 3, "column": 8 } ], "heldBy": ["sE"] }
+  ],
+  "hazards": [
+    { "id": "h1", "start": { "row": 0, "column": 3 },
+      "path": ["down", "down", "down", "down", "down", "down", "up", "up", "up", "up", "up", "up"], "loops": true },
+    { "id": "h2", "start": { "row": 6, "column": 6 },
+      "path": ["up", "up", "up", "up", "up", "up", "down", "down", "down", "down", "down", "down"], "loops": true }
+  ]
+}

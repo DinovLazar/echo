@@ -1,0 +1,25 @@
+{
+  "id": "room-24",
+  "name": "Hold & Hand-off",
+  "width": 8,
+  "height": 5,
+  "start": { "row": 2, "column": 1 },
+  "exit":  { "row": 2, "column": 7 },
+  "echoBudget": 2,
+  "walls": [
+    { "row": 0, "column": 2 }, { "row": 0, "column": 5 },
+    { "row": 1, "column": 2 }, { "row": 1, "column": 5 },
+    { "row": 3, "column": 2 }, { "row": 3, "column": 5 },
+    { "row": 4, "column": 2 }, { "row": 4, "column": 5 }
+  ],
+  "switches": [
+    { "id": "sA", "cell": { "row": 0, "column": 0 } },
+    { "id": "sB", "cell": { "row": 4, "column": 0 } },
+    { "id": "sC", "cell": { "row": 1, "column": 1 } }
+  ],
+  "doors": [
+    { "id": "dAND", "cells": [ { "row": 2, "column": 2 } ], "heldBy": ["sA", "sB"] },
+    { "id": "dC", "cells": [ { "row": 2, "column": 5 } ], "heldBy": ["sC"] }
+  ],
+  "hazards": []
+}

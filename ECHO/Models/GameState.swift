@@ -103,6 +103,8 @@ final class GameState {
 
     /// The live run since the last fold: the directions of every committed move,
     /// in order. A fold banks this as an echo; a no-op move never appends here.
+    /// May contain `.stay` elements — one per `wait()` (Phase 4.01) — so a folded
+    /// echo can hold position across turns (D-066/D-067).
     private(set) var currentRun: [Direction] = []
 
     /// The banked echoes, oldest first. Each replays its recorded moves locked to
@@ -254,6 +256,7 @@ final class GameState {
     /// returns `false`.
     @discardableResult
     func move(_ direction: Direction) -> Bool {
+        guard direction != .stay else { return false }   // `.stay` is passed only via wait() (D-067)
         guard !hasWon else { return false }   // input locked after a win
         let target = GridCoordinate(
             row: player.row + direction.offset.row,
@@ -286,6 +289,42 @@ final class GameState {
         } else {
             lastMoveOutcome = .stepped
         }
+        return true
+    }
+
+    /// **Wait** — pass a turn in place (Phase 4.01 / D-066). The fifth player action:
+    /// the world advances by one shared turn — every echo and hazard takes its next
+    /// step — while present-you holds position and records a `.stay`.
+    ///
+    /// Holding position is **risky**: a wait runs the **same** collision check a move
+    /// does (`playerCollides`), with the held cell as both the previous and the new
+    /// cell, so a mover (echo or hazard) stepping onto that tile this turn is a
+    /// **death** — `lastMoveOutcome = .died` and the current run restarts (the fatal
+    /// wait ticked the turn and appended its `.stay`, which the restart then discards,
+    /// returning present-you to `start` and the turn to 0 while every folded echo stays
+    /// put). Otherwise the wait survives → `lastMoveOutcome = .stepped`.
+    ///
+    /// A wait **never checks the exit** (you can't win by standing still) and is the
+    /// **single** way to record a `.stay`. Refused (a no-op returning `false`) only
+    /// when input is locked by a win — symmetry with `move(_:)`/`stepBack()`. Returns
+    /// whether a turn was passed (always `true` unless already won, including the fatal
+    /// wait, which did pass its turn before the run was discarded).
+    @discardableResult
+    func wait() -> Bool {
+        guard !hasWon else { return false }   // input locked after a win
+        let held = player
+        turn += 1
+        currentRun.append(.stay)
+
+        // Same collision rule as a move (echoes + hazards), with the held tile as both
+        // the previous and the new cell: a mover that lands on it this turn kills you.
+        if playerCollides(previousPlayerCell: held, newPlayerCell: held, turn: turn) {
+            lastMoveOutcome = .died   // set before the rewind, which never touches it
+            restartRun()
+            return true
+        }
+
+        lastMoveOutcome = .stepped
         return true
     }
 

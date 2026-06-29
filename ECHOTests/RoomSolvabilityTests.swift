@@ -53,14 +53,45 @@ final class RoomSolvabilityTests: XCTestCase {
         return level
     }
 
+    /// Replay one cell-path run through the state, treating a **repeated cell as a wait**
+    /// (Phase 4.01 — `GameState.wait()`); every other step is a move derived from the two
+    /// adjacent cells. Asserts each step commits and the player lands where expected (a
+    /// no-op, a wait moved off its tile, or a collision restart is a failure). Used by both
+    /// `assertSolves` (the reference solutions) and the negative tests (to bank the echoes).
+    private func replayRun(_ state: GameState, _ run: [GridCoordinate],
+                           _ label: String, file: StaticString = #filePath, line: UInt = #line) {
+        for j in 1..<run.count {
+            if run[j] == run[j - 1] {
+                XCTAssertTrue(state.wait(), "\(label) step \(j): wait() was refused", file: file, line: line)
+                XCTAssertEqual(state.player, run[j],
+                               "\(label) step \(j): a wait moved the player off \(run[j]) (a mover landed on it)",
+                               file: file, line: line)
+            } else {
+                guard let dir = Direction(from: run[j - 1], to: run[j]) else {
+                    XCTFail("\(label) step \(j): \(run[j - 1]) -> \(run[j]) is not orthogonally adjacent",
+                            file: file, line: line)
+                    return
+                }
+                XCTAssertTrue(state.move(dir),
+                              "\(label) step \(j): move \(run[j - 1]) -> \(run[j]) was a no-op (wall / closed door / off-grid)",
+                              file: file, line: line)
+                XCTAssertEqual(state.player, run[j],
+                               "\(label) step \(j): expected \(run[j]) but a collision restarted the run (turn \(state.turn))",
+                               file: file, line: line)
+            }
+        }
+    }
+
     /// Replay a reference solution and assert a clean win within budget.
     ///
     /// `runs` is a list of coordinate-path runs (turn 0 = the room `start`); the last
-    /// run is the live finish (never folded), each earlier run is folded into an echo.
-    /// Asserts: the decoded room matches the structural spec; every intended move
-    /// commits and lands on its next cell (no no-op, no mid-run restart); each fold
-    /// succeeds and banks exactly one echo; the final run reaches `exit` with
-    /// `hasWon == true`; and the number of folds used is ≤ the echo budget.
+    /// run is the live finish (never folded), each earlier run is folded into an echo. A
+    /// **repeated cell within a run is a wait** (Phase 4.01), so a run can dwell in place —
+    /// the core of the Part-4 relay rooms (21–25). Asserts: the decoded room matches the
+    /// structural spec; every intended move commits and lands on its next cell (no no-op, no
+    /// mid-run restart) and every wait holds the tile; each fold succeeds and banks exactly
+    /// one echo; the final run reaches `exit` with `hasWon == true`; and the number of folds
+    /// used is ≤ the echo budget.
     @discardableResult
     private func assertSolves(
         _ id: String, budget: Int, start: GridCoordinate, exit: GridCoordinate,
@@ -82,16 +113,7 @@ final class RoomSolvabilityTests: XCTestCase {
         for (i, run) in runs.enumerated() {
             let isFinal = (i == runs.count - 1)
             XCTAssertEqual(state.player, run[0], "\(id) run \(i): player not on start at turn 0")
-            for j in 1..<run.count {
-                guard let dir = Direction(from: run[j - 1], to: run[j]) else {
-                    XCTFail("\(id) run \(i) step \(j): \(run[j - 1]) -> \(run[j]) is not orthogonally adjacent")
-                    return state
-                }
-                XCTAssertTrue(state.move(dir),
-                              "\(id) run \(i) step \(j): move \(run[j - 1]) -> \(run[j]) was a no-op (wall / closed door / off-grid)")
-                XCTAssertEqual(state.player, run[j],
-                               "\(id) run \(i) step \(j): expected \(run[j]) but a collision restarted the run (turn \(state.turn))")
-            }
+            replayRun(state, run, "\(id) run \(i)")
             if !isFinal {
                 let before = state.echoes.count
                 XCTAssertTrue(state.fold(), "\(id) run \(i): fold() was refused")
@@ -435,6 +457,113 @@ final class RoomSolvabilityTests: XCTestCase {
                      ])
     }
 
+    // MARK: - Part 4 · Room 21 — "Relay" (budget 1, the new idea)
+
+    /// One echo holds switch A, **waits** to keep door A open while present-you crosses it,
+    /// then relocates to switch B for the later crossing — one self, two jobs (D-069). The
+    /// wait makes the single-echo relay possible; budget 1 makes it required.
+    func testRoom21Relay() {
+        assertSolves("room-21", budget: 1, start: g(1, 0), exit: g(1, 4),
+                     walls: 4, switches: 2, doors: 2, hazards: 0,
+                     runs: [
+                        [g(1,0), g(0,0), g(0,0), g(0,0), g(1,0), g(2,0)],                  // echo: up to sA, wait×2, down to sB
+                        [g(1,0), g(1,0), g(1,1), g(1,2), g(1,2), g(1,2), g(1,3), g(1,4)],   // live: wait, cross dA, wait×2, cross dB, exit
+                     ])
+    }
+
+    // MARK: - Room 22 — "Two Relays" (budget 2)
+
+    /// Two relocating echoes, choreographed so the door windows line up: echo 1 relays
+    /// s1→s3 (doors 1 & 3), echo 2 relays s2→s4 (doors 2 & 4); present-you threads all four.
+    func testRoom22TwoRelays() {
+        assertSolves("room-22", budget: 2, start: g(2, 1), exit: g(2, 9),
+                     walls: 16, switches: 4, doors: 4, hazards: 0,
+                     runs: [
+                        [g(2,1), g(2,0), g(1,0), g(0,0), g(0,0), g(0,0), g(0,0), g(0,0), g(1,0), g(2,0), g(3,0), g(4,0)],   // echo 1: hold s1, relocate to s3
+                        [g(2,1), g(1,1), g(1,1), g(1,1), g(1,1), g(1,1), g(1,1), g(1,1), g(1,1), g(1,1), g(1,1), g(2,1), g(3,1)], // echo 2: hold s2, relocate to s4
+                        [g(2,1), g(2,1), g(2,1), g(2,1), g(2,2), g(2,3), g(2,4), g(2,5), g(2,5), g(2,5), g(2,5), g(2,5), g(2,6), g(2,7), g(2,8), g(2,9)], // live
+                     ])
+    }
+
+    // MARK: - Room 23 — "Patrol & Relay" (budget 2, one enemy)
+
+    /// A relay echo (sA→sC) + a static hold (sB) + a patrol bouncing column 3. The relay's
+    /// generous windows mean the tension is reading the patrol across the (2,3) crossing.
+    func testRoom23PatrolAndRelay() {
+        assertSolves("room-23", budget: 2, start: g(2, 1), exit: g(2, 8),
+                     walls: 12, switches: 3, doors: 3, hazards: 1,
+                     runs: [
+                        [g(2,1), g(2,0), g(1,0), g(0,0), g(0,0), g(0,0), g(0,0), g(1,0), g(2,0), g(3,0), g(4,0)],   // echo 1: hold sA, relocate to sC
+                        [g(2,1), g(1,1)],                                                                            // echo 2: static hold of sB
+                        [g(2,1), g(2,1), g(2,1), g(2,1), g(2,2), g(2,3), g(2,4), g(2,5), g(2,5), g(2,5), g(2,5), g(2,6), g(2,7), g(2,8)], // live: cross dA, slip past the patrol, then dC
+                     ])
+    }
+
+    /// Negative (D-034): after the same folds, crossing door A one beat late walks present-you
+    /// straight into the patrol on (2,3) at turn 6 — the relay alone is not enough; time it.
+    func testRoom23NaiveRunHitsPatrol() {
+        let state = GameState(level: loadRoom("room-23"))
+        replayRun(state, [g(2,1), g(2,0), g(1,0), g(0,0), g(0,0), g(0,0), g(0,0), g(1,0), g(2,0), g(3,0), g(4,0)], "room-23 echo 1")
+        XCTAssertTrue(state.fold())
+        replayRun(state, [g(2,1), g(1,1)], "room-23 echo 2")
+        XCTAssertTrue(state.fold())
+        for _ in 0..<4 { XCTAssertTrue(state.wait()) }   // dawdle four turns, then cross dA late
+        XCTAssertTrue(state.move(.right))                // turn 5: onto (2,2) through dA
+        state.move(.right)                               // turn 6: onto (2,3), where the patrol is
+        XCTAssertFalse(state.hasWon, "the naive run meets the patrol on (2,3) at turn 6")
+        XCTAssertEqual(state.player, state.start)
+        XCTAssertEqual(state.turn, 0)
+    }
+
+    // MARK: - Room 24 — "Hold & Hand-off" (budget 2, AND-door)
+
+    /// An AND-door (both echoes on sA & sB at once) combined with a relocate: after present-you
+    /// crosses it, echo 1 leaves sA and hands off to sC to hold the later door dC. Two places
+    /// at once, then one self moves on.
+    func testRoom24HoldAndHandoff() {
+        assertSolves("room-24", budget: 2, start: g(2, 1), exit: g(2, 7),
+                     walls: 8, switches: 3, doors: 2, hazards: 0,
+                     runs: [
+                        [g(2,1), g(2,0), g(1,0), g(0,0), g(0,0), g(0,0), g(0,0), g(0,1), g(1,1)],   // echo 1: hold sA (AND), hand off to sC
+                        [g(2,1), g(3,1), g(3,0), g(4,0)],                                            // echo 2: hold sB (the other AND half)
+                        [g(2,1), g(2,1), g(2,1), g(2,1), g(2,2), g(2,3), g(2,4), g(2,4), g(2,4), g(2,5), g(2,6), g(2,7)], // live: cross the AND-door, then dC
+                     ])
+    }
+
+    // MARK: - Room 25 — "Clockwork" (budget 3, two enemies, the band capstone)
+
+    /// The oversized capstone (D-069): a three-switch AND-door (be in three places at once),
+    /// two of those echoes then relay to later doors (dD, dE), and two out-of-phase patrols
+    /// bounce the open columns between the doors. Budget 3, every advance timed.
+    func testRoom25Clockwork() {
+        assertSolves("room-25", budget: 3, start: g(3, 1), exit: g(3, 10),
+                     walls: 18, switches: 5, doors: 3, hazards: 2,
+                     runs: [
+                        [g(3,1), g(2,1), g(1,1), g(1,0), g(1,0), g(1,0), g(1,0), g(1,0), g(1,0), g(1,0), g(1,1), g(0,1)],   // echo 1: hold sA (AND), relay to sD
+                        [g(3,1), g(4,1), g(5,1), g(5,0), g(5,0), g(5,0), g(5,0), g(5,0), g(5,0), g(5,0), g(5,1), g(6,1)],   // echo 2: hold sB (AND), relay to sE
+                        [g(3,1), g(3,0)],                                                                                   // echo 3: hold sC (the third AND switch)
+                        [g(3,1), g(3,1), g(3,1), g(3,1), g(3,2), g(3,3), g(3,4), g(3,4), g(3,4), g(3,4), g(3,4), g(3,4), g(3,5), g(3,6), g(3,7), g(3,8), g(3,9), g(3,10)], // live: cross dAND, wait out the patrols, thread dD & dE
+                     ])
+    }
+
+    /// Negative (D-034): rushing the AND-door open and walking straight in steps onto patrol
+    /// h1 at (3,3) on turn 9 — the relays open the doors, but the patrols still bite.
+    func testRoom25NaiveRushHitsPatrol() {
+        let state = GameState(level: loadRoom("room-25"))
+        replayRun(state, [g(3,1), g(2,1), g(1,1), g(1,0), g(1,0), g(1,0), g(1,0), g(1,0), g(1,0), g(1,0), g(1,1), g(0,1)], "room-25 echo 1")
+        XCTAssertTrue(state.fold())
+        replayRun(state, [g(3,1), g(4,1), g(5,1), g(5,0), g(5,0), g(5,0), g(5,0), g(5,0), g(5,0), g(5,0), g(5,1), g(6,1)], "room-25 echo 2")
+        XCTAssertTrue(state.fold())
+        replayRun(state, [g(3,1), g(3,0)], "room-25 echo 3")
+        XCTAssertTrue(state.fold())
+        for _ in 0..<7 { XCTAssertTrue(state.wait()) }   // dawdle, then cross the AND-door at turn 8
+        XCTAssertTrue(state.move(.right))                // turn 8: onto (3,2) through dAND
+        state.move(.right)                               // turn 9: onto (3,3), where patrol h1 is
+        XCTAssertFalse(state.hasWon, "the naive rush meets patrol h1 on (3,3) at turn 9")
+        XCTAssertEqual(state.player, state.start)
+        XCTAssertEqual(state.turn, 0)
+    }
+
     // MARK: - Hazard traces (one period, vs the documented patrol)
 
     /// Each hazard's computed one-period trace matches the trace documented for its
@@ -465,5 +594,9 @@ final class RoomSolvabilityTests: XCTestCase {
         traceAt("room-19", 1, [g(3, 4), g(3, 5), g(3, 4), g(3, 3)])
         traceAt("room-20", 0, [g(1, 3), g(2, 3), g(3, 3), g(2, 3)])
         traceAt("room-20", 1, [g(2, 5), g(3, 5), g(4, 5), g(3, 5)])
+        // Part 4 band patrols (rooms 23 & 25).
+        traceAt("room-23", 0, [g(0, 3), g(1, 3), g(2, 3), g(3, 3), g(4, 3), g(3, 3), g(2, 3), g(1, 3)])
+        traceAt("room-25", 0, [g(0, 3), g(1, 3), g(2, 3), g(3, 3), g(4, 3), g(5, 3), g(6, 3), g(5, 3), g(4, 3), g(3, 3), g(2, 3), g(1, 3)])
+        traceAt("room-25", 1, [g(6, 6), g(5, 6), g(4, 6), g(3, 6), g(2, 6), g(1, 6), g(0, 6), g(1, 6), g(2, 6), g(3, 6), g(4, 6), g(5, 6)])
     }
 }

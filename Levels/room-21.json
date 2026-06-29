@@ -1,0 +1,22 @@
+{
+  "id": "room-21",
+  "name": "Relay",
+  "width": 5,
+  "height": 3,
+  "start": { "row": 1, "column": 0 },
+  "exit":  { "row": 1, "column": 4 },
+  "echoBudget": 1,
+  "walls": [
+    { "row": 0, "column": 1 }, { "row": 0, "column": 3 },
+    { "row": 2, "column": 1 }, { "row": 2, "column": 3 }
+  ],
+  "switches": [
+    { "id": "sA", "cell": { "row": 0, "column": 0 } },
+    { "id": "sB", "cell": { "row": 2, "column": 0 } }
+  ],
+  "doors": [
+    { "id": "dA", "cells": [ { "row": 1, "column": 1 } ], "heldBy": ["sA"] },
+    { "id": "dB", "cells": [ { "row": 1, "column": 3 } ], "heldBy": ["sB"] }
+  ],
+  "hazards": []
+}

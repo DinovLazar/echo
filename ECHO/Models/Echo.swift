@@ -39,6 +39,12 @@ nonisolated struct Echo: Identifiable, Equatable, Sendable {
     /// walked its whole path; for any `turn` beyond that it **stands still** on
     /// its last tile (what later lets an echo "hold" a switch). Pure: same inputs
     /// always yield the same tile, which is the replay-fidelity guarantee.
+    ///
+    /// A recorded run may now contain mid-path `.stay` elements (Phase 4.01 — one
+    /// per `GameState.wait()`); each has a zero offset, so it advances the index
+    /// without moving and the echo **holds its tile** for that turn before walking
+    /// on (D-066/D-067). This needs no special-casing here — `.stay.offset` is
+    /// `(0, 0)` — so the same loop replays a dwell-then-relocate run exactly.
     func position(start: GridCoordinate, turn: Int) -> GridCoordinate {
         let steps = max(0, min(turn, moves.count))
         var cell = start
@@ -58,8 +64,11 @@ nonisolated struct Echo: Identifiable, Equatable, Sendable {
     /// Empty once the echo has run out of recorded moves at `turn` (`turn >=
     /// moves.count`): a stationary echo has no upcoming path, so it shows no dots.
     /// Because the list stops at `moves.count` it never includes the standing-still
-    /// repeats of an exhausted echo, so there are no trailing duplicate cells. Pure —
-    /// a read of recorded intent only; it changes no gameplay.
+    /// repeats of an *exhausted* echo, so there are no trailing duplicate cells. A
+    /// mid-path `.stay` (Phase 4.01), however, repeats the *same* cell on consecutive
+    /// turns within the path, so the list can contain an interior duplicate — harmless
+    /// for the dotted trail (the resampler skips a zero-length segment), so dedupe is
+    /// left as-is (D-067). Pure — a read of recorded intent only; it changes no gameplay.
     func upcomingCells(start: GridCoordinate, turn: Int) -> [GridCoordinate] {
         guard turn < moves.count else { return [] }
         return ((turn + 1)...moves.count).map { position(start: start, turn: $0) }

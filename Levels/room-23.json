@@ -1,0 +1,29 @@
+{
+  "id": "room-23",
+  "name": "Patrol & Relay",
+  "width": 9,
+  "height": 5,
+  "start": { "row": 2, "column": 1 },
+  "exit":  { "row": 2, "column": 8 },
+  "echoBudget": 2,
+  "walls": [
+    { "row": 0, "column": 2 }, { "row": 0, "column": 4 }, { "row": 0, "column": 6 },
+    { "row": 1, "column": 2 }, { "row": 1, "column": 4 }, { "row": 1, "column": 6 },
+    { "row": 3, "column": 2 }, { "row": 3, "column": 4 }, { "row": 3, "column": 6 },
+    { "row": 4, "column": 2 }, { "row": 4, "column": 4 }, { "row": 4, "column": 6 }
+  ],
+  "switches": [
+    { "id": "sA", "cell": { "row": 0, "column": 0 } },
+    { "id": "sB", "cell": { "row": 1, "column": 1 } },
+    { "id": "sC", "cell": { "row": 4, "column": 0 } }
+  ],
+  "doors": [
+    { "id": "dA", "cells": [ { "row": 2, "column": 2 } ], "heldBy": ["sA"] },
+    { "id": "dB", "cells": [ { "row": 2, "column": 4 } ], "heldBy": ["sB"] },
+    { "id": "dC", "cells": [ { "row": 2, "column": 6 } ], "heldBy": ["sC"] }
+  ],
+  "hazards": [
+    { "id": "h1", "start": { "row": 0, "column": 3 },
+      "path": ["down", "down", "down", "down", "up", "up", "up", "up"], "loops": true }
+  ]
+}

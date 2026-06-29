@@ -51,6 +51,25 @@
 
 ---
 
+## Part 4 — Post-launch campaign expansion (20 → 36 rooms across three new mechanics, D-065)
+
+> Each new mechanic ships as its own engine phase and is **proven before** the rooms that use it. Bands: 21–25 strategic/relocating echoes (wait); 26–30 teleport; 31–35 mirror; 36 a bonus finale stacking mirror **and** teleport. Rooms 25 / 30 / 35 are oversized hard capstones; **room 35 becomes the campaign finale**, 36 a bonus beyond it.
+
+| # | Phase | Type | Scope | Status |
+|---|---|---|---|---|
+| 4.01 | The wait action | Code | `Direction.stay` + `GameState.wait()` (a pass-the-turn move; a wait can be fatal) + the explicit **Wait** HUD control + first-pass wait feedback (pulse / calm tick / haptic). The primitive every "strategic echo" room needs (D-066–D-068). | **Done** |
+| 4.02 | Rooms 21–25 | Code (+ Chat on design) | The "strategic / relocating echo" band: 21 "Relay" (b1), 22 "Two Relays" (b2), 23 "Patrol & Relay" (b2, enemy enters), 24 "Hold & Hand-off" (b2, AND-door + relocate), 25 "Clockwork" (b3, two enemies — the band capstone). Each with a solvability test; rooms 23 & 25 with a negative (D-069). | **Done** |
+| 4.03 | Teleport engine | Code | The two-region teleport pad mechanic, proven headlessly before any room uses it. | Planned |
+| 4.04 | Rooms 26–30 | Code (+ Chat on design) | The teleport band; room 30 the oversized capstone. | Planned |
+| 4.05 | Mirror engine | Code | The "you exist in both halves at once" mirror mechanic, proven before its rooms. | Planned |
+| 4.06 | Rooms 31–35 | Code (+ Chat on design) | The mirror band; **room 35 the new campaign finale**. | Planned |
+| 4.07 | Mirror × teleport interaction | Code (+ Chat) | Define + prove what happens when a two-bodied mirrored entity hits a teleport pad — the rules-sketch + engine phase gating room 36. | Planned |
+| 4.08 | Room 36 | Code (+ Chat on design) | The bonus finale: three connected maps (two mirrored halves + a teleport-only third), four echoes, six+ teleport pads, two enemies — the hardest room in the game. | Planned |
+
+**Part 4 milestone:** the campaign is 36 rooms deep across three new mechanics, each proven on the phone as it lands.
+
+---
+
 ## Critical path & dependencies
 
 - **1.01 → 1.02** proves the build-and-install pipeline *before* any mechanic work, so device problems surface early.

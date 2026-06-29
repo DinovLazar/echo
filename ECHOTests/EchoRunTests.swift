@@ -63,8 +63,11 @@ final class EchoRunTests: XCTestCase {
     }
 
     func testEveryMoveFromCentreIsARealStepNotAStall() {
-        // The centre has four on-board neighbours, so no first move can stall.
-        for direction in Direction.allCases {
+        // The centre has four on-board neighbours, so no first move can stall. Echo Run
+        // only ever issues the four movement directions; `.stay` is the campaign-only wait
+        // verb (`GameState.wait()`, Phase 4.01) and is never an arcade input, so it is not
+        // part of this sweep (which is why we list the four explicitly, not allCases).
+        for direction in [Direction.up, .down, .left, .right] {
             let s = EchoRunState()
             XCTAssertEqual(s.move(direction), .stepped)
             XCTAssertEqual(s.recording, [direction])

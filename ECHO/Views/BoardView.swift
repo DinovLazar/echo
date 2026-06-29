@@ -85,6 +85,15 @@ struct BoardView: View {
     /// don't need it (e.g. previews), so the board's behaviour is unchanged when unused.
     var inputLock: Binding<Bool>? = nil
 
+    /// A monotonically-rising "wait requested" counter from `RoomView`'s Wait control
+    /// (Phase 4.01 / D-068). Each increment runs one wait through `commitWait()` — the
+    /// **same** input-lock-guarded path a tap/swipe uses — so the wait gets the in-place
+    /// pulse, the calm `.stay` tick, the step haptic, and (on a fatal wait) the deferred
+    /// death dissolve, instead of `RoomView` mutating `state` directly. Defaults to `0`
+    /// (never changes for call sites that don't pass it, e.g. previews), so an unused
+    /// board never waits — `.onChange` fires only on a real change.
+    var waitSignal: Int = 0
+
     /// The active palette (Light by default; `ContentView` injects it). The single
     /// switch point a later Settings phase (2.06) will bind to a user toggle.
     @Environment(\.theme) private var theme
@@ -96,6 +105,10 @@ struct BoardView: View {
     @State private var stepTick = 0
     /// Whether the last survived step was horizontal — chooses the squash axis.
     @State private var lastStepHorizontal = true
+    /// Bumped once per **survived wait** (Phase 4.01). Drives the player's gentle in-place
+    /// "breath" pulse (a small symmetric scale) — distinct from the directional step
+    /// squash and from a blocked move's nothing — so a held turn reads as its own beat.
+    @State private var waitPulseTick = 0
 
     /// The in-flight fold choreography (hit-pause → ripple → echo peel), or `nil` at
     /// rest. Set when a fold is detected (the echo count rose); cleared by a `task`
@@ -182,6 +195,11 @@ struct BoardView: View {
             .onChange(of: fold != nil || death != nil) { _, locked in
                 inputLock?.wrappedValue = locked
             }
+            // A wait requested by the HUD's Wait control (Phase 4.01 / D-068): run it
+            // through `commitWait`, the same input-lock-guarded path a tap/swipe uses, so
+            // it lands with its pulse/tick/haptic and deferred-death handling. Fires only
+            // on a real change, so the default `waitSignal == 0` never waits.
+            .onChange(of: waitSignal) { _, _ in commitWait() }
             // Clear each effect once it has fully played. Keyed on the generation so a
             // new event cancels the previous timer; the model restart a death needs is
             // performed here, at the end of the dissolve (handover §6d restart = 0 ms).
@@ -522,6 +540,18 @@ struct BoardView: View {
                     CubicKeyframe(1.0, duration: 0.020)
                 }
             }
+            // A survived wait's in-place "breath" (Phase 4.01): a gentle symmetric scale
+            // up and back — no slide, no directional squash — so passing a turn reads as
+            // its own quiet beat, distinct from a step and from a blocked move. Fires only
+            // on `waitPulseTick`, so a step or a fatal wait never breathes.
+            .keyframeAnimator(initialValue: Breath(), trigger: waitPulseTick) { view, breath in
+                view.scaleEffect(breath.scale)
+            } keyframes: { _ in
+                KeyframeTrack(\.scale) {
+                    CubicKeyframe(1.06, duration: 0.090)   // breathe out
+                    CubicKeyframe(1.0, duration: 0.090)    // settle (~180 ms in place)
+                }
+            }
             .shadow(color: theme.shadowColor,
                     radius: scaled(BoardMetrics.shadowBlur, cell: cell),
                     x: 0,
@@ -656,6 +686,51 @@ struct BoardView: View {
         }
     }
 
+    /// Pass a turn in place (Phase 4.01 / D-066/D-068), requested by the HUD's Wait
+    /// control. Mirrors `commitMove`'s structure so a wait gets the same feedback and the
+    /// same deferred-death handling, only the player never slides:
+    ///   • Refused (nothing happens) while a fold/death effect plays or after a win — the
+    ///     same locks `commitMove` honours.
+    ///   • A **fatal wait** (a mover lands on the held tile this turn — predicted by the
+    ///     model's own `playerCollides` at `turn + 1`, exactly as a fatal step is) **does
+    ///     not** mutate the model: it hands the §6d dissolve a kill at the held tile and
+    ///     fires the death sound + collision tap; `finishDeath()` performs the restart
+    ///     `wait()` would have done. ("Holding position is risky," D-066.)
+    ///   • A **survived wait** plays the calm `.stay` tick layered with any echoes that
+    ///     step this turn (one chord), bumps the in-place breath pulse, then commits
+    ///     `wait()` inside `withAnimation(.step)` so every echo/hazard glides in lockstep
+    ///     (the player holds, so it does not slide), and fires the light step tap.
+    private func commitWait() {
+        guard fold == nil, death == nil else { return }
+        guard !state.hasWon else { return }
+
+        let held = state.player
+        let fatal = state.playerCollides(previousPlayerCell: held,
+                                         newPlayerCell: held,
+                                         turn: state.turn + 1)
+        if fatal {
+            triggerDeath(previous: held, contact: held)
+            audio.playDeath()
+            haptics.collision()
+        } else {
+            // The wait's own calm tick, layered with each echo whose recorded path still
+            // has a move at this turn — derived read-only before the model advances, fired
+            // at one audio time so the turn sounds as a chord (matching `commitMove`).
+            let fromTurn = state.turn
+            var ticks: [Direction] = [.stay]
+            for echo in state.echoes where fromTurn < echo.moves.count {
+                ticks.append(echo.moves[fromTurn])
+            }
+            audio.playStep(directions: ticks)
+
+            waitPulseTick &+= 1
+            withAnimation(Motion.step) {
+                _ = state.wait()
+            }
+            haptics.step()
+        }
+    }
+
     // MARK: - Effect triggers (presentation only)
 
     /// Begin the fold choreography over the just-rewound board. Called from
@@ -743,6 +818,13 @@ struct BoardView: View {
 private struct Squash {
     var along: CGFloat = 1
     var across: CGFloat = 1
+}
+
+/// The single symmetric scale used by the survived-wait "breath" keyframe (Phase 4.01).
+/// Resting value is `1`; the keyframe lifts it to `1.06` and back over ~180 ms so a wait
+/// reads as a gentle in-place pulse rather than a directional step squash.
+private struct Breath {
+    var scale: CGFloat = 1
 }
 
 /// One dot of an echo-trail line. `id` is the dot's order outward from the echo, which

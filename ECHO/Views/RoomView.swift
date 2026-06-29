@@ -50,6 +50,12 @@ struct RoomView: View {
     /// Mirrors `BoardView`'s fold/death input lock so the out-of-board controls honour it
     /// (D-059). `BoardView` writes it through the `inputLock` binding.
     @State private var inputLocked = false
+    /// A monotonically-rising "wait requested" counter (Phase 4.01 / D-068). The Wait
+    /// control bumps it; `BoardView` observes it and runs the wait through the **same**
+    /// input-lock-guarded path a tap/swipe uses (`commitWait`), so a wait gets the same
+    /// pulse / calm tick / haptic and deferred-death dissolve as a move — rather than the
+    /// control mutating `state` directly and bypassing all of that.
+    @State private var waitRequests = 0
     /// Whether the win overlay is showing (set a beat after `state.hasWon` flips true).
     @State private var showWin = false
     /// Whether a "Next room" advance is in flight: an opaque paper cover is veiling the
@@ -73,7 +79,7 @@ struct RoomView: View {
                 topHUD
                 BoardView(state: state, audio: audio, haptics: haptics,
                           showEchoTrail: settings.echoTrailEnabled, guidance: guidance,
-                          inputLock: $inputLocked)
+                          inputLock: $inputLocked, waitSignal: waitRequests)
                 controlBar
             }
             if showWin {
@@ -139,10 +145,14 @@ struct RoomView: View {
 
     // MARK: - Control row (routed through the input-lock-guarded path — D-059)
 
-    /// Fold / Step back / Reset run, each in the reusable `ControlButtonStyle`. Every
-    /// action is gated on the mirrored input lock so it never mutates `state` while a fold
-    /// or death effect is playing (the deferred-death restart must not be pre-empted);
-    /// Step back is additionally a no-op at turn 0.
+    /// Fold / Step back / Reset run / Wait, each in the reusable `ControlButtonStyle`
+    /// (D-054/D-068). Every action is gated on the mirrored input lock so it never mutates
+    /// `state` while a fold or death effect is playing (the deferred-death restart must not
+    /// be pre-empted); Step back is additionally a no-op at turn 0. **Wait** is enabled
+    /// whenever input is unlocked — not disabled at turn 0 (you may pass the very first
+    /// turn) — and routes through `BoardView.commitWait` by bumping `waitRequests`, so the
+    /// wait lands with its own feedback and deferred-death handling rather than a bare
+    /// `state.wait()` call here (D-068).
     private var controlBar: some View {
         HStack(spacing: 8) {
             Button("Fold") { guard !inputLocked else { return }; state.fold() }
@@ -150,6 +160,8 @@ struct RoomView: View {
             Button("Step back") { guard !inputLocked else { return }; state.stepBack() }
                 .disabled(inputLocked || state.turn == 0)
             Button("Reset run") { guard !inputLocked else { return }; state.restartRun() }
+                .disabled(inputLocked)
+            Button("Wait") { guard !inputLocked else { return }; waitRequests &+= 1 }
                 .disabled(inputLocked)
         }
         .buttonStyle(ControlButtonStyle())
