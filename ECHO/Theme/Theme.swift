@@ -191,6 +191,8 @@ nonisolated enum BoardMetrics {
     static let exitSize: CGFloat = 30          // exit ring diameter, 0.68·C
     static let doorThickness: CGFloat = 10     // door bar thickness
     static let doorStub: CGFloat = 8           // open-door remnant stub length
+    static let padSize: CGFloat = 30           // teleport-pad glyph side (bracketed corners)
+    static let padCornerArm: CGFloat = 0.32    // corner-bracket arm as a fraction of the side
 
     // Corner radii (pt).
     static let radiusPlayer: CGFloat = 7
@@ -205,11 +207,13 @@ nonisolated enum BoardMetrics {
     static let strokeExitRing: CGFloat = 3
     static let strokeEnemyOutline: CGFloat = 2
     static let strokeHairline: CGFloat = 0.5
+    static let strokePad: CGFloat = 2.5        // teleport-pad bracket stroke
 
     // Opacities (mode-independent).
     static let doorClosedFill: Double = 0.92
     static let doorOpenRemnant: Double = 0.22  // open-door stub opacity
     static let exitDefaultRing: Double = 0.55  // ink ring opacity when not the active goal
+    static let padGlyph: Double = 0.50         // teleport-pad bracket opacity (ink; monochrome, not accent)
 
     // Echo-trail aid (Phase 2.06; handover §8/§1b). The optional dotted upcoming-path
     // preview. Same `echo.base` token + opacity in both palettes (handover §8).

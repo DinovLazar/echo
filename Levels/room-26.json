@@ -1,0 +1,24 @@
+{
+  "id": "room-26",
+  "name": "Threshold",
+  "width": 7,
+  "height": 3,
+  "start": { "row": 1, "column": 0 },
+  "exit":  { "row": 1, "column": 6 },
+  "echoBudget": 1,
+  "walls": [
+    { "row": 0, "column": 3 }, { "row": 1, "column": 3 }, { "row": 2, "column": 3 }, { "row": 0, "column": 4 },
+    { "row": 0, "column": 5 }, { "row": 0, "column": 6 }, { "row": 2, "column": 4 }, { "row": 2, "column": 5 },
+    { "row": 2, "column": 6 }
+  ],
+  "switches": [
+    { "id": "sA", "cell": { "row": 0, "column": 0 } }
+  ],
+  "doors": [
+    { "id": "dB", "cells": [ { "row": 1, "column": 5 } ], "heldBy": ["sA"] }
+  ],
+  "hazards": [],
+  "portals": [
+    { "id": "p1", "cells": [ { "row": 1, "column": 2 }, { "row": 1, "column": 4 } ] }
+  ]
+}

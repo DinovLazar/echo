@@ -59,8 +59,8 @@
 |---|---|---|---|---|
 | 4.01 | The wait action | Code | `Direction.stay` + `GameState.wait()` (a pass-the-turn move; a wait can be fatal) + the explicit **Wait** HUD control + first-pass wait feedback (pulse / calm tick / haptic). The primitive every "strategic echo" room needs (D-066–D-068). | **Done** |
 | 4.02 | Rooms 21–25 | Code (+ Chat on design) | The "strategic / relocating echo" band: 21 "Relay" (b1), 22 "Two Relays" (b2), 23 "Patrol & Relay" (b2, enemy enters), 24 "Hold & Hand-off" (b2, AND-door + relocate), 25 "Clockwork" (b3, two enemies — the band capstone). Each with a solvability test; rooms 23 & 25 with a negative (D-069). | **Done** |
-| 4.03 | Teleport engine | Code | The two-region teleport pad mechanic, proven headlessly before any room uses it. | Planned |
-| 4.04 | Rooms 26–30 | Code (+ Chat on design) | The teleport band; room 30 the oversized capstone. | Planned |
+| 4.03 | Teleport engine | Code | The two-region teleport pad mechanic (linked pad pairs, auto-on-step), proven headlessly before any room uses it: `Portal` + level-format-v2 `portals`, the shared `resolveLanding` resolver, pad-aware move/stepBack/echo-position/isCellHeld/collision, a first-pass pad glyph (D-070–D-072). | **Done** |
+| 4.04 | Rooms 26–30 | Code (+ Chat on design) | The teleport band: 26 "Threshold" (b1), 27 "Two Rooms" (b2), 28 "Portal & Patrol" (b2, enemy), 29 "Relay Across" (b2, wait+teleport), 30 "Junction" (b3, two enemies — the oversized capstone, 3 pad pairs + AND-door across regions). Each with a solvability test; rooms 28 & 30 with a negative (D-073). | **Done** |
 | 4.05 | Mirror engine | Code | The "you exist in both halves at once" mirror mechanic, proven before its rooms. | Planned |
 | 4.06 | Rooms 31–35 | Code (+ Chat on design) | The mirror band; **room 35 the new campaign finale**. | Planned |
 | 4.07 | Mirror × teleport interaction | Code (+ Chat) | Define + prove what happens when a two-bodied mirrored entity hits a teleport pad — the rules-sketch + engine phase gating room 36. | Planned |

@@ -53,11 +53,16 @@ final class RoomSolvabilityTests: XCTestCase {
         return level
     }
 
-    /// Replay one cell-path run through the state, treating a **repeated cell as a wait**
-    /// (Phase 4.01 — `GameState.wait()`); every other step is a move derived from the two
-    /// adjacent cells. Asserts each step commits and the player lands where expected (a
-    /// no-op, a wait moved off its tile, or a collision restart is a failure). Used by both
-    /// `assertSolves` (the reference solutions) and the negative tests (to bank the echoes).
+    /// Replay one cell-path run through the state. A step is one of three kinds, derived
+    /// from each consecutive pair of cells:
+    ///   • **wait** — a repeated cell (Phase 4.01 — `GameState.wait()`);
+    ///   • **move** — an orthogonally adjacent cell (a `Direction` step);
+    ///   • **teleport** (Phase 4.03) — a non-adjacent cell reached because the step landed
+    ///     on a pad and jumped to its partner; the input direction is the one whose
+    ///     `resolveLanding` (with the board's `padMap`) equals the next cell.
+    /// Asserts each step commits and the player lands where expected (a no-op, a wait moved
+    /// off its tile, or a collision restart is a failure). Used by both `assertSolves` (the
+    /// reference solutions) and the negative tests (to bank the echoes).
     private func replayRun(_ state: GameState, _ run: [GridCoordinate],
                            _ label: String, file: StaticString = #filePath, line: UInt = #line) {
         for j in 1..<run.count {
@@ -67,8 +72,14 @@ final class RoomSolvabilityTests: XCTestCase {
                                "\(label) step \(j): a wait moved the player off \(run[j]) (a mover landed on it)",
                                file: file, line: line)
             } else {
-                guard let dir = Direction(from: run[j - 1], to: run[j]) else {
-                    XCTFail("\(label) step \(j): \(run[j - 1]) -> \(run[j]) is not orthogonally adjacent",
+                // An adjacent step, or — if not adjacent — a pad-jump whose input direction
+                // resolves (through the board's padMap) to the next cell.
+                let dir = Direction(from: run[j - 1], to: run[j])
+                    ?? [Direction.up, .down, .left, .right].first {
+                        resolveLanding(from: run[j - 1], step: $0, pads: state.padMap) == run[j]
+                    }
+                guard let dir else {
+                    XCTFail("\(label) step \(j): \(run[j - 1]) -> \(run[j]) is neither adjacent nor a teleport",
                             file: file, line: line)
                     return
                 }
@@ -95,7 +106,7 @@ final class RoomSolvabilityTests: XCTestCase {
     @discardableResult
     private func assertSolves(
         _ id: String, budget: Int, start: GridCoordinate, exit: GridCoordinate,
-        walls: Int, switches: Int, doors: Int, hazards: Int,
+        walls: Int, switches: Int, doors: Int, hazards: Int, portals: Int = 0,
         runs: [[GridCoordinate]]
     ) -> GameState {
         let level = loadRoom(id)
@@ -107,6 +118,7 @@ final class RoomSolvabilityTests: XCTestCase {
         XCTAssertEqual(level.switches.count, switches, "\(id): switch count")
         XCTAssertEqual(level.doors.count, doors, "\(id): door count")
         XCTAssertEqual(level.hazards.count, hazards, "\(id): hazard count")
+        XCTAssertEqual(level.portals.count, portals, "\(id): portal count")
 
         let state = GameState(level: level)
         var foldsUsed = 0
@@ -564,6 +576,112 @@ final class RoomSolvabilityTests: XCTestCase {
         XCTAssertEqual(state.turn, 0)
     }
 
+    // MARK: - Part 4 · Room 26 — "Threshold" (budget 1, the portal — clean)
+
+    /// One pad pair joins two walled regions. An echo holds switch A in region A; present-you
+    /// **portals** to region B and exits through the door A holds (D-070/D-073). Unsolvable
+    /// without the portal (region B is walled off) and without folding (door B stays shut).
+    func testRoom26Threshold() {
+        assertSolves("room-26", budget: 1, start: g(1, 0), exit: g(1, 6),
+                     walls: 9, switches: 1, doors: 1, hazards: 0, portals: 1,
+                     runs: [
+                        [g(1,0), g(0,0)],                              // echo: hold switch A
+                        [g(1,0), g(1,1), g(1,4), g(1,5), g(1,6)],      // live: portal A->B, cross dB, exit
+                     ])
+    }
+
+    // MARK: - Room 27 — "Two Rooms" (budget 2, echoes traverse portals)
+
+    /// An echo **teleports** to the far region to hold s2 while another echo holds s1 in the
+    /// near region — two door-pairs. Teaches that echoes teleport too: present-you crosses d1
+    /// (near), portals to B, crosses d2 (far) to the exit (D-073).
+    func testRoom27TwoRooms() {
+        assertSolves("room-27", budget: 2, start: g(1, 0), exit: g(1, 8),
+                     walls: 17, switches: 2, doors: 2, hazards: 0, portals: 1,
+                     runs: [
+                        [g(1,0), g(0,0)],                                          // echo1: hold s1 (near)
+                        [g(1,0), g(1,1), g(1,2), g(1,5), g(0,5)],                  // echo2: cross d1, TELEPORT, hold s2 (far)
+                        [g(1,0), g(1,0), g(1,1), g(1,2), g(1,5), g(1,6), g(1,7), g(1,8)], // live
+                     ])
+    }
+
+    // MARK: - Room 28 — "Portal & Patrol" (budget 2, one enemy)
+
+    /// A patrol bounces the partner-pad column in region B, so the teleport **landing** is
+    /// timed — danger is checked where you land (D-070). echo1 holds s1 (near); echo2 teleports
+    /// to B to hold s2 (far); present-you times the hop and the crossing.
+    func testRoom28PortalAndPatrol() {
+        assertSolves("room-28", budget: 2, start: g(2, 0), exit: g(2, 8),
+                     walls: 32, switches: 2, doors: 2, hazards: 1, portals: 1,
+                     runs: [
+                        [g(2,0), g(1,0)],                                          // echo1: hold s1 (near)
+                        [g(2,0), g(2,1), g(2,2), g(2,5), g(1,5), g(0,5)],          // echo2: cross d1, TELEPORT, hold s2 (far)
+                        [g(2,0), g(2,0), g(2,1), g(2,2), g(2,5), g(2,6), g(2,7), g(2,8)], // live: hop when the pad is clear
+                     ])
+    }
+
+    /// Negative (D-034): dawdling, then teleporting LATE, lands present-you on the partner pad
+    /// (2,5) at turn 6 — exactly when the patrol sweeps onto it — a mistimed hop, so it dies.
+    func testRoom28NaiveHopLandsOnPatrol() {
+        let state = GameState(level: loadRoom("room-28"))
+        replayRun(state, [g(2,0), g(1,0)], "room-28 echo1");                  XCTAssertTrue(state.fold())
+        replayRun(state, [g(2,0), g(2,1), g(2,2), g(2,5), g(1,5), g(0,5)], "room-28 echo2"); XCTAssertTrue(state.fold())
+        for _ in 0..<3 { XCTAssertTrue(state.wait()) }   // dawdle three turns
+        XCTAssertTrue(state.move(.right))                // turn 4: (2,1)
+        XCTAssertTrue(state.move(.right))                // turn 5: cross d1 onto (2,2)
+        state.move(.right)                               // turn 6: hop onto padB (2,5) — the patrol is there
+        XCTAssertFalse(state.hasWon, "a mistimed hop lands on the patrol at the partner pad")
+        XCTAssertEqual(state.player, state.start)
+        XCTAssertEqual(state.turn, 0)
+    }
+
+    // MARK: - Room 29 — "Relay Across" (budget 2, wait + teleport combined)
+
+    /// The wait threaded through a portal (D-073): ONE echo holds switch A in region A (opening
+    /// an early door dB1 in region B), **waits**, then relocates **through the portal** to switch
+    /// B in region B (opening the late door dB2). A second echo statically holds sC so present-you
+    /// can reach the portal. The hard pre-capstone.
+    func testRoom29RelayAcross() {
+        assertSolves("room-29", budget: 2, start: g(1, 0), exit: g(1, 10),
+                     walls: 20, switches: 3, doors: 3, hazards: 0, portals: 1,
+                     runs: [
+                        [g(1,0), g(2,0)],                                                                       // echo2: static hold sC (opens dA)
+                        [g(1,0), g(0,0), g(0,0), g(0,0), g(0,0), g(0,0), g(1,0), g(1,1), g(1,2), g(1,3), g(1,6), g(0,6)], // relay: hold sA, wait, TELEPORT, hold sB
+                        [g(1,0), g(1,0), g(1,1), g(1,2), g(1,3), g(1,6), g(1,7), g(1,8), g(1,8), g(1,8), g(1,8), g(1,8), g(1,9), g(1,10)], // live
+                     ])
+    }
+
+    // MARK: - Room 30 — "Junction" (budget 3, two enemies, the band capstone)
+
+    /// The oversized capstone (D-073): a hub corridor with **three** pad pairs to three isolated
+    /// switch-spokes; three echoes each **teleport** out to hold one switch of an **AND-door
+    /// across three regions** (dEXIT = sA & sB & sC); two out-of-phase patrols sweep the corridor.
+    /// Budget 3, every advance timed; the switches are reachable only by portal.
+    func testRoom30Junction() {
+        assertSolves("room-30", budget: 3, start: g(4, 1), exit: g(4, 7),
+                     walls: 33, switches: 3, doors: 1, hazards: 2, portals: 3,
+                     runs: [
+                        [g(4,1), g(3,1), g(2,1), g(0,0)],     // echo1: TELEPORT to spoke A, hold sA
+                        [g(4,1), g(0,2)],                     // echo2: TELEPORT to spoke B, hold sB
+                        [g(4,1), g(5,1), g(6,1), g(0,4)],     // echo3: TELEPORT to spoke C, hold sC
+                        [g(4,1), g(4,2), g(4,2), g(4,3), g(4,4), g(4,4), g(4,5), g(4,6), g(4,7)], // live: thread both patrols, cross the AND-door
+                     ])
+    }
+
+    /// Negative (D-034): once the AND-door is held open, rushing straight along the corridor
+    /// steps onto patrol h1 at (4,3) on turn 2 — the portals open the door, but the patrols still bite.
+    func testRoom30NaiveRushHitsPatrol() {
+        let state = GameState(level: loadRoom("room-30"))
+        replayRun(state, [g(4,1), g(3,1), g(2,1), g(0,0)], "room-30 echo1");   XCTAssertTrue(state.fold())
+        replayRun(state, [g(4,1), g(0,2)], "room-30 echo2");                   XCTAssertTrue(state.fold())
+        replayRun(state, [g(4,1), g(5,1), g(6,1), g(0,4)], "room-30 echo3");   XCTAssertTrue(state.fold())
+        XCTAssertTrue(state.move(.right))                // turn 1: (4,2)
+        state.move(.right)                               // turn 2: onto (4,3), where patrol h1 is
+        XCTAssertFalse(state.hasWon, "the naive rush meets patrol h1 on (4,3) at turn 2")
+        XCTAssertEqual(state.player, state.start)
+        XCTAssertEqual(state.turn, 0)
+    }
+
     // MARK: - Hazard traces (one period, vs the documented patrol)
 
     /// Each hazard's computed one-period trace matches the trace documented for its
@@ -598,5 +716,9 @@ final class RoomSolvabilityTests: XCTestCase {
         traceAt("room-23", 0, [g(0, 3), g(1, 3), g(2, 3), g(3, 3), g(4, 3), g(3, 3), g(2, 3), g(1, 3)])
         traceAt("room-25", 0, [g(0, 3), g(1, 3), g(2, 3), g(3, 3), g(4, 3), g(5, 3), g(6, 3), g(5, 3), g(4, 3), g(3, 3), g(2, 3), g(1, 3)])
         traceAt("room-25", 1, [g(6, 6), g(5, 6), g(4, 6), g(3, 6), g(2, 6), g(1, 6), g(0, 6), g(1, 6), g(2, 6), g(3, 6), g(4, 6), g(5, 6)])
+        // Part 4 teleport band patrols (rooms 28 & 30).
+        traceAt("room-28", 0, [g(0, 5), g(1, 5), g(2, 5), g(3, 5), g(4, 5), g(3, 5), g(2, 5), g(1, 5)])
+        traceAt("room-30", 0, [g(2, 3), g(3, 3), g(4, 3), g(5, 3), g(4, 3), g(3, 3)])
+        traceAt("room-30", 1, [g(5, 5), g(4, 5), g(3, 5), g(2, 5), g(3, 5), g(4, 5)])
     }
 }

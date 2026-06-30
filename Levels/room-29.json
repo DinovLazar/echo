@@ -1,0 +1,30 @@
+{
+  "id": "room-29",
+  "name": "Relay Across",
+  "width": 11,
+  "height": 3,
+  "start": { "row": 1, "column": 0 },
+  "exit":  { "row": 1, "column": 10 },
+  "echoBudget": 2,
+  "walls": [
+    { "row": 0, "column": 5 }, { "row": 1, "column": 5 }, { "row": 2, "column": 5 }, { "row": 0, "column": 1 },
+    { "row": 0, "column": 2 }, { "row": 0, "column": 3 }, { "row": 0, "column": 4 }, { "row": 2, "column": 1 },
+    { "row": 2, "column": 2 }, { "row": 2, "column": 3 }, { "row": 2, "column": 4 }, { "row": 0, "column": 7 },
+    { "row": 0, "column": 8 }, { "row": 0, "column": 9 }, { "row": 0, "column": 10 }, { "row": 2, "column": 6 },
+    { "row": 2, "column": 7 }, { "row": 2, "column": 8 }, { "row": 2, "column": 9 }, { "row": 2, "column": 10 }
+  ],
+  "switches": [
+    { "id": "sA", "cell": { "row": 0, "column": 0 } },
+    { "id": "sC", "cell": { "row": 2, "column": 0 } },
+    { "id": "sB", "cell": { "row": 0, "column": 6 } }
+  ],
+  "doors": [
+    { "id": "dA", "cells": [ { "row": 1, "column": 1 } ], "heldBy": ["sC"] },
+    { "id": "dB1", "cells": [ { "row": 1, "column": 7 } ], "heldBy": ["sA"] },
+    { "id": "dB2", "cells": [ { "row": 1, "column": 9 } ], "heldBy": ["sB"] }
+  ],
+  "hazards": [],
+  "portals": [
+    { "id": "p1", "cells": [ { "row": 1, "column": 4 }, { "row": 1, "column": 6 } ] }
+  ]
+}

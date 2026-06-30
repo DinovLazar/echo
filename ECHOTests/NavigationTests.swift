@@ -35,50 +35,53 @@ final class NavigationTests: XCTestCase {
 
     // MARK: - Campaign catalog & ordering
 
-    /// The catalog is the twenty-five `room-01 … room-25` ids, in zero-padded order.
-    func testCampaignCatalogIsTwentyFiveRoomsInOrder() {
-        XCTAssertEqual(Campaign.roomIDs.count, 25)
+    /// The catalog is the thirty `room-01 … room-30` ids, in zero-padded order.
+    func testCampaignCatalogIsThirtyRoomsInOrder() {
+        XCTAssertEqual(Campaign.roomIDs.count, 30)
         XCTAssertEqual(Campaign.roomIDs.first, "room-01")
-        XCTAssertEqual(Campaign.roomIDs.last, "room-25")
+        XCTAssertEqual(Campaign.roomIDs.last, "room-30")
         for (i, id) in Campaign.roomIDs.enumerated() {
             XCTAssertEqual(id, String(format: "room-%02d", i + 1))
         }
-        XCTAssertEqual(Set(Campaign.roomIDs).count, 25)   // no duplicates
+        XCTAssertEqual(Set(Campaign.roomIDs).count, 30)   // no duplicates
     }
 
-    /// The 1-based display number maps room-01 → 1 … room-25 → 25; unknown → nil.
+    /// The 1-based display number maps room-01 → 1 … room-30 → 30; unknown → nil.
     func testRoomNumberMapping() {
         XCTAssertEqual(Campaign.number(of: "room-01"), 1)
         XCTAssertEqual(Campaign.number(of: "room-10"), 10)
         XCTAssertEqual(Campaign.number(of: "room-20"), 20)
         XCTAssertEqual(Campaign.number(of: "room-25"), 25)
+        XCTAssertEqual(Campaign.number(of: "room-30"), 30)
         XCTAssertNil(Campaign.number(of: "not-a-room"))
     }
 
-    /// `contains` recognises real rooms (now through room-25) and rejects everything else.
+    /// `contains` recognises real rooms (now through room-30) and rejects everything else.
     func testContainsKnownAndUnknownRooms() {
         XCTAssertTrue(Campaign.contains("room-01"))
         XCTAssertTrue(Campaign.contains("room-20"))
-        XCTAssertTrue(Campaign.contains("room-21"))
         XCTAssertTrue(Campaign.contains("room-25"))
-        XCTAssertFalse(Campaign.contains("room-26"))
+        XCTAssertTrue(Campaign.contains("room-26"))
+        XCTAssertTrue(Campaign.contains("room-30"))
+        XCTAssertFalse(Campaign.contains("room-31"))
         XCTAssertFalse(Campaign.contains(""))
     }
 
     // MARK: - Next-room computation (incl. the final-room boundary)
 
-    /// `next(after:)` follows play order — including across the Part-4 band boundary.
+    /// `next(after:)` follows play order — including across the Part-4 band boundaries.
     func testNextRoomFollowsOrder() {
         XCTAssertEqual(Campaign.next(after: "room-01"), "room-02")
         XCTAssertEqual(Campaign.next(after: "room-10"), "room-11")
         XCTAssertEqual(Campaign.next(after: "room-19"), "room-20")
         XCTAssertEqual(Campaign.next(after: "room-20"), "room-21")
-        XCTAssertEqual(Campaign.next(after: "room-24"), "room-25")
+        XCTAssertEqual(Campaign.next(after: "room-25"), "room-26")
+        XCTAssertEqual(Campaign.next(after: "room-29"), "room-30")
     }
 
-    /// The final room (now room-25) has no next — the win overlay's "Campaign complete" branch.
+    /// The final room (now room-30) has no next — the win overlay's "Campaign complete" branch.
     func testNextRoomFinalBoundaryIsNil() {
-        XCTAssertNil(Campaign.next(after: "room-25"))
+        XCTAssertNil(Campaign.next(after: "room-30"))
     }
 
     /// An unknown id has no next (never crashes, never wraps).
@@ -200,7 +203,7 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(Campaign.contains("room-03"))   // still openable
     }
 
-    /// The selectable set is constant across solved-state — always all twenty-five rooms. The
+    /// The selectable set is constant across solved-state — always all thirty rooms. The
     /// only solved-dependent value is the `firstUnsolved` accent hint, which is always
     /// either nil (all solved) or a real catalog room — never a gate.
     func testSelectableSetIsConstantAcrossSolvedState() {
@@ -210,7 +213,7 @@ final class NavigationTests: XCTestCase {
         let all = SettingsStore(defaults: freshDefaults("test.nav.const.all"))
         for id in Campaign.roomIDs { all.markSolved(id) }
 
-        XCTAssertEqual(Campaign.roomIDs.count, 25)   // the selectable set never shrinks
+        XCTAssertEqual(Campaign.roomIDs.count, 30)   // the selectable set never shrinks
         for store in [none, some, all] {
             if let next = Campaign.firstUnsolved(solved: store.solvedRooms) {
                 XCTAssertTrue(Campaign.contains(next))

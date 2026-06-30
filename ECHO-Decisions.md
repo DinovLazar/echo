@@ -557,6 +557,38 @@
 - **Consequences:** A clean ramp for the new mechanic and a milestone capstone. Exact cell layouts and verified solutions are Code's to author (Chat sets the arc/intent; Code authors + verifies, adjusting geometry/budget minimally if a room won't solve — the D-038/D-039 precedent). The campaign catalog grows to 25; **room 25 is the band capstone, not the campaign finale** (that becomes room 35 — D-065).
 - **Links:** D-033 / D-034; D-035; D-036; D-038 / D-039; D-065; D-066.
 
+### D-070 · 2026-06-29 · Teleport mechanic — linked pad pairs, auto-on-step (part of the move)
+- **Status:** Accepted
+- **Context:** Part 4's second band needs a two-region ("split") room and a way to traverse between regions — and room 36 will need many portals. The owner chose how a pad fires.
+- **Decision:** Portals are linked pad pairs: stepping onto one pad lands you instantly on its partner, as part of that move (one turn ticks; you end the turn on the partner). It is automatic on step (no new input verb). Echoes teleport too — a pad is a board property, so an echo replaying a step onto a pad jumps deterministically and can relay across regions. Hazards ignore pads (patrols stay predictable — D-036). Danger is checked where you land (the partner). The partner does not re-fire (arrival is terminal; a `.stay` never teleports), and a move whose resolved landing is blocked is a no-op. A "two-part" room is two walled-off regions joined by a pair; "6+ portals" is 3+ pairs. Pairs are bidirectional (one-way links can be a later addition if room 36 wants them).
+- **Alternatives considered:** Tap-the-portal to use it ("click") — closer to the owner's original wording, but rejected: it adds a new input verb and forces the recorded run to store "clicks" rather than plain directions, re-opening the run representation the wait deliberately avoided (D-067) and making echo replay messier. One-way-only links (rejected for v1 — bidirectional is the simpler default; add directional links later only if needed).
+- **Consequences:** A clean, deterministic two-region mechanic that composes with walk / hold / wait / relay and adds no special cases at the rules level. Honest downside: it is the one place the position math stops being a simple offset sum and becomes a step-by-step walk that jumps at pads (D-071), and it introduces a new on-board element to render (a first-pass glyph; Design-refinable).
+- **Links:** D-014; D-020; D-036; D-071; D-072; D-073; D-065 (Part 4); room 36's spec in D-065.
+
+### D-071 · 2026-06-29 · Teleport-aware position is a step-by-step walk with a `pads` parameter (default empty)
+- **Status:** Accepted
+- **Context:** Today a position is `start +` the sum of a run's offsets (`Echo.position`, `stepBack`'s replay, `move`'s increment). A teleport makes position depend on the board's pad layout, so the sum no longer holds.
+- **Decision:** Compute position by walking the moves one at a time through a single shared resolver that jumps at pads, with a `pads` map passed in as a new parameter defaulting to empty. `Echo.position(start:turn:pads:)` and `upcomingCells(...:pads:)` gain the default-empty param; `GameState` passes its `padMap`. With empty `pads` the walk equals the old offset sum, so rooms 01–25 and the entire verified ~140-method suite need no migration. One resolver is shared by `move`, `stepBack`, and `Echo` so there is exactly one teleport rule.
+- **Alternatives considered:** Re-type the run / move position derivation into `GameState` (rejected — bigger refactor of a verified value type for no behavioural gain; the default-empty param keeps `Echo` pure and call sites intact). Store a stateful mutable position per echo (rejected — breaks the "position is a pure function of (start, moves, turn[, pads])" guarantee that makes replays exact, D-014). Make hazards pad-aware too (rejected — patrols must stay predictable, D-036).
+- **Consequences:** Minimal disturbance to the verified core; teleport stays pure and deterministic; the trail aid stays truthful (it shows the jump). Honest downside: position is now O(turn) per query (a walk, not a closed-form sum) — negligible at these board/turn sizes.
+- **Links:** D-070; D-014; D-067 (`.stay` in the walk); D-036.
+
+### D-072 · 2026-06-29 · Level format v2 — an optional `portals` array (additive, backward-compatible)
+- **Status:** Accepted
+- **Context:** Rooms need to declare pad pairs. The v1 format is locked (D-024) but already decodes its element arrays with `decodeIfPresent ?? []`, so it can be extended without breaking existing rooms.
+- **Decision:** Add an optional top-level `portals` array (`Portal { id; cells: [two] }`), decoded with `decodeIfPresent ?? []`. An absent key means no portals, so every existing room JSON (rooms 01–25) is byte-for-byte valid and unchanged. This is a v2 extension, not a v1 change — the D-024 fields are untouched.
+- **Alternatives considered:** A separate pads file (rejected — splits one room across two files for no gain). Encoding pads as a special kind of wall/switch (rejected — overloads an existing element's meaning and muddies rendering and the held/blocked rules).
+- **Consequences:** One small, backward-compatible field; the loader and all 25 existing rooms are unaffected. Honest downside: "the locked v1 format" is now "v1 + the v2 `portals` extension" — recorded as such here so the version story stays honest.
+- **Links:** D-024 (the format it extends); D-070; D-019 (held/blocked rules unchanged).
+
+### D-073 · 2026-06-29 · Rooms 26–30 — the teleport lesson arc
+- **Status:** Accepted
+- **Context:** Part 4's second content band introduces the portal and must continue the curve past room 25, building to an oversized capstone that also rehearses room 36's portal density.
+- **Decision:** Five escalating rooms: 26 "Threshold" (one pad pair, an echo holds across, you portal to exit; budget 1); 27 "Two Rooms" (an echo relays through a portal; budget 2); 28 "Portal & Patrol" (a patrol + portal hops, "danger where you land"; budget 2; one enemy — enemies enter the band here); 29 "Relay Across" (wait + teleport — an echo holds, waits, relocates through a portal; budget 2–3); 30 "Junction" (oversized capstone — 3+ pad pairs / 6+ portals, multiple relocating echoes across regions, an AND-door across regions, two enemies, tight budget). Each ships a solvability test; rooms 28 & 30 ship negatives.
+- **Alternatives considered:** Introduce all portal complexity at once (rejected — the band should ramp). Skip combining with the wait/relay band (rejected — room 29's wait+teleport is the point where the two mechanics compose, and it sets up room 36).
+- **Consequences:** A clean ramp for the portal and a milestone capstone that previews room 36. Exact layouts and verified solutions are Code's to author (Chat sets the arc; Code authors + verifies, adjusting minimally per the D-038/D-039 precedent). The catalog grows to 30; room 30 is the band capstone, not the campaign finale (room 35 — D-065).
+- **Links:** D-070; D-066 (the wait it composes with); D-033 / D-034 / D-035 / D-036; D-038 / D-039; D-065.
+
 ---
 
 ### Decision-log conventions

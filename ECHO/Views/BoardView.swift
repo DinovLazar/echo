@@ -148,6 +148,7 @@ struct BoardView: View {
             ZStack(alignment: .topLeading) {
                 lattice(cell: cell)
                 walls(cell: cell)
+                pads(cell: cell)
                 exitRing(cell: cell)
                 doorBars(cell: cell)
                 switchMarks(cell: cell)
@@ -269,6 +270,30 @@ struct BoardView: View {
                 .frame(width: size, height: size)
                 .position(center(of: wall, cell: cell))
                 .allowsHitTesting(false)
+        }
+    }
+
+    /// Teleport pads (Phase 4.03 / D-070): a **first-pass** monochrome glyph — four
+    /// bracketed corners (an open "frame") drawn at every portal cell. Paired pads share
+    /// the identical glyph so the link reads at a glance, and the bracketed-corners shape
+    /// is unambiguous against the other board marks: switches (open/filled circles), the
+    /// exit (hollow ring), doors (bars), and walls (solid fill). Uses the `ink` token at a
+    /// quiet opacity — **never the accent** (that stays reserved for the must-reach-now
+    /// element). The jump itself is instantaneous this phase (the player just steps into
+    /// the pad); **refine in a later Design pass.** Drawn beneath the pieces, hit-testing
+    /// off, like the other structural marks.
+    private func pads(cell: CGFloat) -> some View {
+        let size = scaled(BoardMetrics.padSize, cell: cell)
+        let stroke = scaled(BoardMetrics.strokePad, cell: cell)
+        return ForEach(state.portals) { portal in
+            ForEach(Array(portal.cells.enumerated()), id: \.offset) { _, padCell in
+                PadGlyph(armFraction: BoardMetrics.padCornerArm)
+                    .stroke(theme.ink.opacity(BoardMetrics.padGlyph),
+                            style: StrokeStyle(lineWidth: stroke, lineCap: .round, lineJoin: .round))
+                    .frame(width: size, height: size)
+                    .position(center(of: padCell, cell: cell))
+                    .allowsHitTesting(false)
+            }
         }
     }
 
@@ -399,7 +424,9 @@ struct BoardView: View {
         let dotSize = scaled(BoardMetrics.trailDotSize, cell: cell)
         let spacing = scaled(BoardMetrics.trailDotSpacing, cell: cell)
         return ForEach(state.echoes) { echo in
-            let upcoming = echo.upcomingCells(start: state.start, turn: state.turn)
+            // Pad-aware (Phase 4.03): the trail reads the echo's pad-resolved upcoming
+            // path, so it draws a teleport as the jump it is (D-071).
+            let upcoming = state.upcomingCells(of: echo)
             if !upcoming.isEmpty {
                 // Polyline = the echo's current cell centre, then each upcoming centre.
                 let points = ([state.position(of: echo)] + upcoming)
@@ -628,8 +655,11 @@ struct BoardView: View {
         // model state a death relies on can't be moved out from under it.
         guard fold == nil, death == nil else { return }
         guard !state.hasWon else { return }
-        let target = GridCoordinate(row: state.player.row + direction.offset.row,
-                                    column: state.player.column + direction.offset.column)
+        // The **resolved** landing — through the shared teleport rule, exactly as
+        // `GameState.move(_:)` does (Phase 4.03). On a step onto a pad this is the partner,
+        // so the guards, the death prediction, and the death-contact tile all evaluate at
+        // the landing — matching the engine — rather than at the pre-jump pad cell.
+        let target = resolveLanding(from: state.player, step: direction, pads: state.padMap)
         // Same guards as `GameState.move(_:)` — a refused move animates nothing.
         guard state.contains(target),
               !state.isWall(target),
@@ -777,7 +807,9 @@ struct BoardView: View {
 
         let deathTurn = state.turn + 1
         let collidingEchoes = state.echoes.filter {
-            $0.position(start: state.start, turn: deathTurn) == contact
+            // Pad-aware (Phase 4.03): match the echo at its teleport-resolved tile, so an
+            // echo that killed you in the far region is the one shown fizzing (D-070).
+            $0.position(start: state.start, turn: deathTurn, pads: state.padMap) == contact
         }
         let killer = state.hazards.first { hazard in
             let now = hazard.position(at: deathTurn)
@@ -825,6 +857,39 @@ private struct Squash {
 /// reads as a gentle in-place pulse rather than a directional step squash.
 private struct Breath {
     var scale: CGFloat = 1
+}
+
+/// The first-pass teleport-pad glyph (Phase 4.03 / D-070): four corner brackets framing a
+/// cell, drawn as a single stroked path (an open square broken at the edge midpoints), so
+/// a pad reads as a distinct "portal frame" against the round/bar/solid marks. `armFraction`
+/// is each corner arm's length as a fraction of the (square) side. `nonisolated` so the
+/// `Shape.path(in:)` requirement (a `nonisolated` protocol member) is satisfiable under the
+/// app's default-MainActor isolation (D-040), matching the other value types here.
+nonisolated struct PadGlyph: Shape {
+    var armFraction: CGFloat = 0.32
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let arm = min(rect.width, rect.height) * armFraction
+        let (minX, maxX, minY, maxY) = (rect.minX, rect.maxX, rect.minY, rect.maxY)
+        // Top-left corner.
+        p.move(to: CGPoint(x: minX, y: minY + arm))
+        p.addLine(to: CGPoint(x: minX, y: minY))
+        p.addLine(to: CGPoint(x: minX + arm, y: minY))
+        // Top-right corner.
+        p.move(to: CGPoint(x: maxX - arm, y: minY))
+        p.addLine(to: CGPoint(x: maxX, y: minY))
+        p.addLine(to: CGPoint(x: maxX, y: minY + arm))
+        // Bottom-right corner.
+        p.move(to: CGPoint(x: maxX, y: maxY - arm))
+        p.addLine(to: CGPoint(x: maxX, y: maxY))
+        p.addLine(to: CGPoint(x: maxX - arm, y: maxY))
+        // Bottom-left corner.
+        p.move(to: CGPoint(x: minX + arm, y: maxY))
+        p.addLine(to: CGPoint(x: minX, y: maxY))
+        p.addLine(to: CGPoint(x: minX, y: maxY - arm))
+        return p
+    }
 }
 
 /// One dot of an echo-trail line. `id` is the dot's order outward from the echo, which

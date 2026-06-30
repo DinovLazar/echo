@@ -42,6 +42,15 @@
 //  (walls are static so never bite; door nuance is handled by level design). The
 //  verbatim-replay promise is the keystone and is not special-cased (D-020).
 //
+//  Phase 4.03 (teleport) adds linked **pad pairs**: stepping onto one pad lands you
+//  instantly on its partner as part of that move (one turn ticks; you end on the
+//  partner). It is the one place position stops being "start + the sum of the offsets"
+//  and becomes a step-by-step walk that jumps at pads — through the single shared
+//  `resolveLanding` resolver (Echo.swift). `move`/`stepBack`, `Echo.position`/
+//  `upcomingCells`, `isCellHeld`, and the echo branch of `playerCollides` are all
+//  pad-aware via the board's `padMap`; **hazards ignore pads** (patrols stay predictable
+//  — D-036). With no portals the engine behaves byte-for-byte as before (D-070/D-071).
+//
 
 import Observation
 
@@ -94,6 +103,19 @@ final class GameState {
     /// The room's moving hazards. Each is lethal on contact and replays verbatim.
     let hazards: [Hazard]
 
+    /// The room's teleport pad pairs (Phase 4.03 / D-070). Stored for rendering; the
+    /// engine reads `padMap`, the derived bidirectional jump table.
+    let portals: [Portal]
+
+    /// The bidirectional pad-jump table derived from `portals`: for each portal `[a, b]`,
+    /// `a → b` and `b → a`. The single source the shared `resolveLanding` resolver reads,
+    /// so `move`/`stepBack`/echo position all jump by the same rule. Empty when the room
+    /// has no portals (then every position walk equals the old offset sum — D-071). Built
+    /// once at init, where malformed portals (not exactly two distinct cells, or a cell
+    /// shared across portals) trip a debug assertion — a malformed map is an authoring bug
+    /// (D-070).
+    let padMap: [GridCoordinate: GridCoordinate]
+
     /// The player's current cell. Read-only from outside; only `move(_:)` changes it.
     private(set) var player: GridCoordinate
 
@@ -135,6 +157,7 @@ final class GameState {
     ///   - exit: the exit cell, or `nil` for a board that can't be won.
     ///   - echoBudget: max folds allowed; defaults to effectively unlimited.
     ///   - walls/switches/doors/hazards: the room contents; default to none.
+    ///   - portals: the room's teleport pad pairs (default none — D-070).
     init(width: Int = 7,
          height: Int = 7,
          start: GridCoordinate? = nil,
@@ -143,7 +166,8 @@ final class GameState {
          walls: [GridCoordinate] = [],
          switches: [Switch] = [],
          doors: [Door] = [],
-         hazards: [Hazard] = []) {
+         hazards: [Hazard] = [],
+         portals: [Portal] = []) {
         self.width = width
         self.height = height
         let origin = start ?? GridCoordinate(row: height / 2, column: width / 2)
@@ -155,6 +179,30 @@ final class GameState {
         self.switches = switches
         self.doors = doors
         self.hazards = hazards
+        self.portals = portals
+        self.padMap = Self.buildPadMap(portals)
+    }
+
+    /// Derive the bidirectional `padMap` from the room's `portals`. Each portal `[a, b]`
+    /// contributes `a → b` and `b → a`. A well-formed portal has exactly two distinct
+    /// cells and shares no cell with another portal; in debug those invariants are
+    /// asserted (a malformed map is an authoring bug — D-070), while in release the
+    /// builder skips anything malformed rather than crashing the game.
+    private static func buildPadMap(_ portals: [Portal]) -> [GridCoordinate: GridCoordinate] {
+        var map: [GridCoordinate: GridCoordinate] = [:]
+        for portal in portals {
+            assert(portal.cells.count == 2,
+                   "portal \(portal.id) must have exactly two cells, has \(portal.cells.count)")
+            guard portal.cells.count == 2 else { continue }
+            let a = portal.cells[0], b = portal.cells[1]
+            assert(a != b, "portal \(portal.id) cells must be distinct")
+            assert(map[a] == nil && map[b] == nil,
+                   "portal \(portal.id) shares a cell with another portal")
+            guard a != b else { continue }
+            map[a] = b
+            map[b] = a
+        }
+        return map
     }
 
     /// Build a board from a decoded `Level`. A fresh instance per room means
@@ -169,7 +217,8 @@ final class GameState {
                   walls: level.walls,
                   switches: level.switches,
                   doors: level.doors,
-                  hazards: level.hazards)
+                  hazards: level.hazards,
+                  portals: level.portals)
     }
 
     // MARK: - Board queries
@@ -191,7 +240,9 @@ final class GameState {
     /// derivation (the door-block check and rendering) ever asks about.
     func isCellHeld(_ cell: GridCoordinate) -> Bool {
         if player == cell { return true }
-        return echoes.contains { $0.position(start: start, turn: turn) == cell }
+        // Pad-aware (Phase 4.03): an echo that teleported holds a switch in the *far*
+        // region, so its switch occupancy is read at its pad-resolved cell (D-070).
+        return echoes.contains { $0.position(start: start, turn: turn, pads: padMap) == cell }
     }
 
     /// Whether the switch with `id` is held at the current turn (its cell is
@@ -215,10 +266,21 @@ final class GameState {
         doors.contains { $0.cells.contains(cell) && !isDoorOpen($0) }
     }
 
-    /// The cell `echo` occupies right now — a pure function of (`start`, the
-    /// echo's recorded moves, the shared `turn`). The board reads this to draw.
+    /// The cell `echo` occupies right now — a pure function of (`start`, the echo's
+    /// recorded moves, the shared `turn`, and the board's `padMap`). The board reads this
+    /// to draw; pad-aware so a teleported echo draws (and is queried) in the far region
+    /// (Phase 4.03 / D-070).
     func position(of echo: Echo) -> GridCoordinate {
-        echo.position(start: start, turn: turn)
+        echo.position(start: start, turn: turn, pads: padMap)
+    }
+
+    /// The cells `echo` is about to enter from the current `turn` onward — the pad-aware
+    /// read the optional echo-trail aid draws through (Phase 4.03 wraps `Echo.upcomingCells`
+    /// with the board's `padMap`, so the trail shows a teleport as the jump it is). The
+    /// board calls this rather than `Echo.upcomingCells` directly so `padMap` stays
+    /// encapsulated.
+    func upcomingCells(of echo: Echo) -> [GridCoordinate] {
+        echo.upcomingCells(start: start, turn: turn, pads: padMap)
     }
 
     /// The cell `hazard` occupies right now — a pure function of (its `start`,
@@ -235,6 +297,13 @@ final class GameState {
     /// is not recorded, no collision is checked — if it would leave the grid, enter
     /// a wall, or enter a closed door (a door's open-state is read at the current
     /// turn, the visible state *before* the step). Input is also locked after a win.
+    ///
+    /// Phase 4.03 (teleport): the destination is the **resolved landing** — if the step
+    /// lands on a pad, you end the turn on its partner (one turn ticks). The guards run on
+    /// that landing, so you cannot teleport into a blocked cell. Collision/switch/door/win
+    /// all evaluate at the landing; a teleporting move is land-on-only at the partner
+    /// (cross-paths can't fire across a non-adjacent jump), which is correct — danger is
+    /// checked where you land (D-070).
     ///
     /// A committed move updates the player's cell, advances the turn by one, and
     /// appends its direction to the current run. Then the new position is checked
@@ -258,10 +327,11 @@ final class GameState {
     func move(_ direction: Direction) -> Bool {
         guard direction != .stay else { return false }   // `.stay` is passed only via wait() (D-067)
         guard !hasWon else { return false }   // input locked after a win
-        let target = GridCoordinate(
-            row: player.row + direction.offset.row,
-            column: player.column + direction.offset.column
-        )
+        // Pad-aware (Phase 4.03): resolve where the step lands — a step onto a pad jumps
+        // to its partner — then run the same off-grid / wall / closed-door guards on the
+        // **resolved landing**. You cannot teleport into a blocked cell, so that is a
+        // no-op exactly like walking into a wall (turn doesn't advance, nothing recorded).
+        let target = resolveLanding(from: player, step: direction, pads: padMap)
         guard contains(target) else { return false }       // off-grid
         guard !isWall(target) else { return false }         // into a wall
         guard !isClosedDoor(target) else { return false }   // into a closed door
@@ -269,6 +339,8 @@ final class GameState {
         let previousPlayerCell = player
         player = target
         turn += 1
+        // Record the **input direction**, not the destination — a replay re-derives the
+        // jump through `resolveLanding`, so an echo teleports deterministically (D-070).
         currentRun.append(direction)
 
         // Collision first (echoes + hazards): a fatal step restarts the run. The
@@ -350,9 +422,12 @@ final class GameState {
                         newPlayerCell: GridCoordinate,
                         turn t: Int) -> Bool {
         for echo in echoes {
-            let echoNow = echo.position(start: start, turn: t)
+            // Pad-aware (Phase 4.03): an echo's tiles are read through the board's
+            // `padMap`, so a teleported echo is detected in the far region it landed in.
+            // Hazards (below) stay pad-blind by design (D-036).
+            let echoNow = echo.position(start: start, turn: t, pads: padMap)
             if echoNow == newPlayerCell { return true }                 // land-on
-            let echoBefore = echo.position(start: start, turn: t - 1)
+            let echoBefore = echo.position(start: start, turn: t - 1, pads: padMap)
             if echoBefore == newPlayerCell && echoNow == previousPlayerCell {
                 return true                                             // cross-paths (dormant)
             }
@@ -410,10 +485,12 @@ final class GameState {
 
         currentRun.removeLast()
         turn -= 1
+        // Replay the now-shorter run from `start` through the shared `resolveLanding`
+        // walk (Phase 4.03), so undoing a teleporting move returns the player to the
+        // correct pre-teleport cell. With no portals this equals the old offset sum (D-071).
         var cell = start
         for direction in currentRun {
-            cell = GridCoordinate(row: cell.row + direction.offset.row,
-                                  column: cell.column + direction.offset.column)
+            cell = resolveLanding(from: cell, step: direction, pads: padMap)
         }
         player = cell
         return true
