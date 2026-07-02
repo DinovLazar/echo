@@ -1,0 +1,27 @@
+{
+  "id": "room-32",
+  "name": "Break Symmetry",
+  "width": 8,
+  "height": 4,
+  "start": { "row": 2, "column": 1 },
+  "exit":  { "row": 0, "column": 1 },
+  "echoBudget": 1,
+  "walls": [
+    { "row": 2, "column": 2 },
+    { "row": 1, "column": 0 }, { "row": 1, "column": 2 }, { "row": 1, "column": 3 },
+    { "row": 1, "column": 4 }, { "row": 1, "column": 6 }, { "row": 1, "column": 7 }
+  ],
+  "switches": [
+    { "id": "sA", "cell": { "row": 3, "column": 1 } }
+  ],
+  "doors": [
+    { "id": "dL", "cells": [ { "row": 1, "column": 1 } ], "heldBy": ["sA"] },
+    { "id": "dR", "cells": [ { "row": 1, "column": 5 } ], "heldBy": ["sA"] }
+  ],
+  "hazards": [],
+  "mirror": {
+    "axis": "vertical",
+    "startRight": { "row": 2, "column": 6 },
+    "exitRight":  { "row": 0, "column": 5 }
+  }
+}

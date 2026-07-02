@@ -1,0 +1,35 @@
+{
+  "id": "room-35",
+  "name": "Reflection",
+  "width": 10,
+  "height": 6,
+  "start": { "row": 3, "column": 2 },
+  "exit":  { "row": 0, "column": 2 },
+  "echoBudget": 3,
+  "walls": [
+    { "row": 1, "column": 0 }, { "row": 1, "column": 1 }, { "row": 1, "column": 3 },
+    { "row": 1, "column": 4 }, { "row": 1, "column": 5 }, { "row": 1, "column": 6 },
+    { "row": 1, "column": 8 }, { "row": 1, "column": 9 },
+    { "row": 4, "column": 5 }
+  ],
+  "switches": [
+    { "id": "sA", "cell": { "row": 5, "column": 0 } },
+    { "id": "sB", "cell": { "row": 5, "column": 8 } },
+    { "id": "sC", "cell": { "row": 4, "column": 4 } }
+  ],
+  "doors": [
+    { "id": "dL", "cells": [ { "row": 1, "column": 2 } ], "heldBy": ["sA", "sB", "sC"] },
+    { "id": "dR", "cells": [ { "row": 1, "column": 7 } ], "heldBy": ["sA", "sB", "sC"] }
+  ],
+  "hazards": [
+    { "id": "h1", "start": { "row": 2, "column": 9 },
+      "path": ["left", "left", "left", "right", "right", "right"], "loops": true },
+    { "id": "h2", "start": { "row": 4, "column": 0 },
+      "path": ["right", "left"], "loops": true }
+  ],
+  "mirror": {
+    "axis": "vertical",
+    "startRight": { "row": 3, "column": 7 },
+    "exitRight":  { "row": 0, "column": 7 }
+  }
+}

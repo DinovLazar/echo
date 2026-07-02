@@ -6,15 +6,16 @@
 //  and the loader that reads it from a bundled JSON file. A `Level` is plain,
 //  view-independent data; `GameState(level:)` turns it into a playable board
 //  (D-025). The v1 JSON format is locked (D-024); Phase 4.03 adds the **v2**
-//  extension — an optional top-level `portals` array (D-072) — additively, so an
-//  absent key means "no portals" and every v1 room JSON (rooms 01–25) is byte-for-byte
-//  valid and unchanged:
+//  extension — an optional top-level `portals` array (D-072) — and Phase 4.05 adds
+//  the **`mirror` extension** — an optional top-level `mirror` block (D-076) — both
+//  additively, so an absent key means "no portals" / "a normal single-body room" and
+//  every earlier room JSON (rooms 01–30) is byte-for-byte valid and unchanged:
 //
 //      {
 //        "id": "example", "name": "Schema Example",
-//        "width": 7, "height": 7,
+//        "width": 8, "height": 7,
 //        "start": { "row": 6, "column": 0 },
-//        "exit":  { "row": 0, "column": 6 },
+//        "exit":  { "row": 0, "column": 3 },
 //        "echoBudget": 1,
 //        "walls":    [ { "row": 3, "column": 0 } ],
 //        "switches": [ { "id": "s1", "cell": { "row": 6, "column": 1 } } ],
@@ -23,7 +24,10 @@
 //        "hazards":  [ { "id": "h1", "start": { "row": 0, "column": 0 },
 //                        "path": ["right","down"], "loops": true } ],
 //        "portals":  [ { "id": "p1", "cells": [ { "row": 1, "column": 0 },
-//                        { "row": 1, "column": 6 } ] } ]      // v2 (D-072), optional
+//                        { "row": 1, "column": 6 } ] } ],     // v2 (D-072), optional
+//        "mirror":   { "axis": "vertical",                    // mirror ext (D-076), optional
+//                      "startRight": { "row": 6, "column": 7 },
+//                      "exitRight":  { "row": 0, "column": 4 } }
 //      }
 //
 //  Coordinates are `{ row, column }`, origin top-left, 0-indexed — the same
@@ -33,7 +37,10 @@
 //  single-cell, single-switch doors, but the arrays exist so multi-tile and
 //  multi-switch doors need no format change later. A `portals` entry is a linked
 //  **pad pair**: its `cells` are exactly two, each the other's bidirectional partner
-//  — stepping onto one lands you on the other (D-070/D-072).
+//  — stepping onto one lands you on the other (D-070/D-072). A `mirror` block makes
+//  the room **two-body** (Phase 4.05 / D-074): the board splits down a vertical
+//  centerline (width must be even), the top-level `start`/`exit` become the LEFT
+//  body's, and `startRight`/`exitRight` are the RIGHT body's — see `MirrorGameState`.
 //
 //  Deliberately isolation-free and Sendable, matching the other pure value types
 //  (D-013).
@@ -70,6 +77,26 @@ nonisolated struct Portal: Identifiable, Equatable, Sendable, Decodable {
     let cells: [GridCoordinate]   // exactly two — each other's partner (bidirectional)
 }
 
+/// The **mirror** block (level-format `mirror` extension — Phase 4.05 / D-074/D-076).
+/// Its presence makes the room two-body: the board splits down a vertical centerline
+/// into a left half (columns `0 … width/2−1`) and a right half (`width/2 … width−1`),
+/// and present-you is **two bodies on one reflected input**, one confined to each half.
+/// The top-level `start`/`exit` are the LEFT body's; `startRight`/`exitRight` are the
+/// RIGHT body's (authored — the intended design mirrors `start`, but an asymmetric half
+/// may place it elsewhere). Width must be even (debug-asserted by `MirrorGameState`).
+/// Walls/switches/doors/hazards stay authored on the full grid as normal; the halves
+/// may be asymmetric — that asymmetry is the puzzle. Absent block ⇒ a normal
+/// single-body room, so rooms 01–30 decode byte-for-byte unchanged.
+nonisolated struct MirrorSpec: Equatable, Sendable, Decodable {
+    /// The split axis — `"vertical"` is the only value in this version.
+    let axis: String
+    /// The right body's starting cell (must lie in the right half).
+    let startRight: GridCoordinate
+    /// The right body's exit cell (must lie in the right half). You win the instant
+    /// BOTH bodies sit on their own-half exits on the same turn.
+    let exitRight: GridCoordinate
+}
+
 /// One decoded room. Pure data — `GameState(level:)` configures a board from it.
 nonisolated struct Level: Identifiable, Equatable, Sendable, Decodable {
     /// Unique room id (also the JSON file's base name in `Levels/`).
@@ -96,13 +123,18 @@ nonisolated struct Level: Identifiable, Equatable, Sendable, Decodable {
     /// Linked teleport pad pairs (level format v2 — D-072). Empty (the default) on
     /// every v1 room, so rooms 01–25 are unchanged.
     let portals: [Portal]
+    /// The optional two-body mirror block (the `mirror` extension — D-076). `nil`
+    /// (the default) ⇒ a normal single-body room, so rooms 01–30 are unchanged;
+    /// present ⇒ `RoomView`'s screen path runs `MirrorGameState` instead of `GameState`.
+    let mirror: MirrorSpec?
 
     /// Direct initializer (used by tests and any in-code level construction). The
     /// element collections default to empty so a sparse room is cheap to build.
     init(id: String, name: String, width: Int, height: Int,
          start: GridCoordinate, exit: GridCoordinate, echoBudget: Int,
          walls: [GridCoordinate] = [], switches: [Switch] = [],
-         doors: [Door] = [], hazards: [Hazard] = [], portals: [Portal] = []) {
+         doors: [Door] = [], hazards: [Hazard] = [], portals: [Portal] = [],
+         mirror: MirrorSpec? = nil) {
         self.id = id
         self.name = name
         self.width = width
@@ -115,18 +147,20 @@ nonisolated struct Level: Identifiable, Equatable, Sendable, Decodable {
         self.doors = doors
         self.hazards = hazards
         self.portals = portals
+        self.mirror = mirror
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, width, height, start, exit, echoBudget
-        case walls, switches, doors, hazards, portals
+        case walls, switches, doors, hazards, portals, mirror
     }
 
     /// Custom decode so the element arrays may be omitted from a room's JSON (an
     /// absent `walls`/`switches`/`doors`/`hazards`/`portals` simply means "none"); the
     /// core fields stay required so a malformed room fails loudly rather than loading a
-    /// silently-broken board. `portals` is the v2 extension (D-072): an absent key ⇒ no
-    /// portals, so every v1 room JSON decodes byte-for-byte as before.
+    /// silently-broken board. `portals` is the v2 extension (D-072) and `mirror` the
+    /// mirror extension (D-076): an absent key ⇒ no portals / a normal single-body
+    /// room, so every earlier room JSON decodes byte-for-byte as before.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
@@ -141,6 +175,7 @@ nonisolated struct Level: Identifiable, Equatable, Sendable, Decodable {
         doors = try container.decodeIfPresent([Door].self, forKey: .doors) ?? []
         hazards = try container.decodeIfPresent([Hazard].self, forKey: .hazards) ?? []
         portals = try container.decodeIfPresent([Portal].self, forKey: .portals) ?? []
+        mirror = try container.decodeIfPresent(MirrorSpec.self, forKey: .mirror)
     }
 }
 

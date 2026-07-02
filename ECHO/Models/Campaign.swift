@@ -27,9 +27,12 @@
 nonisolated enum Campaign {
     /// The full campaign in play order: the ten teaching rooms (Phase 1.08), the ten
     /// Part-3 campaign rooms (Phase 3.01), the Part-4 "strategic / relocating echo" band
-    /// (rooms 21–25, Phase 4.02 — the wait action's payoff; D-069), and the **teleport
-    /// band** (rooms 26–30, Phase 4.04 — linked pad pairs; D-073). Index `i` ⇒ display
-    /// number `i + 1`. This is the one ordering; everything else derives from it.
+    /// (rooms 21–25, Phase 4.02 — the wait action's payoff; D-069), the **teleport
+    /// band** (rooms 26–30, Phase 4.04 — linked pad pairs; D-073), and the **mirror
+    /// band** (rooms 31–35, Phase 4.06 — two bodies on one reflected input; D-077).
+    /// Room 35 "Reflection" is the campaign finale (D-065); room 36 is a later bonus.
+    /// Index `i` ⇒ display number `i + 1`. This is the one ordering; everything else
+    /// derives from it.
     static let roomIDs: [String] = [
         "room-01", "room-02", "room-03", "room-04", "room-05",
         "room-06", "room-07", "room-08", "room-09", "room-10",
@@ -37,6 +40,7 @@ nonisolated enum Campaign {
         "room-16", "room-17", "room-18", "room-19", "room-20",
         "room-21", "room-22", "room-23", "room-24", "room-25",
         "room-26", "room-27", "room-28", "room-29", "room-30",
+        "room-31", "room-32", "room-33", "room-34", "room-35",
     ]
 
     /// Whether `id` is a real campaign room.

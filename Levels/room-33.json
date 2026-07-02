@@ -1,0 +1,27 @@
+{
+  "id": "room-33",
+  "name": "Cross-Half Hold",
+  "width": 8,
+  "height": 4,
+  "start": { "row": 2, "column": 1 },
+  "exit":  { "row": 0, "column": 1 },
+  "echoBudget": 2,
+  "walls": [
+    { "row": 1, "column": 0 }, { "row": 1, "column": 2 }, { "row": 1, "column": 3 },
+    { "row": 1, "column": 4 }, { "row": 1, "column": 5 }, { "row": 1, "column": 7 }
+  ],
+  "switches": [
+    { "id": "sA", "cell": { "row": 3, "column": 0 } },
+    { "id": "sB", "cell": { "row": 2, "column": 7 } }
+  ],
+  "doors": [
+    { "id": "dL", "cells": [ { "row": 1, "column": 1 } ], "heldBy": ["sA", "sB"] },
+    { "id": "dR", "cells": [ { "row": 1, "column": 6 } ], "heldBy": ["sA", "sB"] }
+  ],
+  "hazards": [],
+  "mirror": {
+    "axis": "vertical",
+    "startRight": { "row": 2, "column": 6 },
+    "exitRight":  { "row": 0, "column": 6 }
+  }
+}

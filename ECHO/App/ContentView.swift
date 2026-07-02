@@ -49,6 +49,13 @@ struct ContentView: View {
     /// re-renders. A bare board until the first room is opened.
     @State private var roomState = GameState()
 
+    /// The mirror board for the currently-open room, when it is a mirror room (Phase
+    /// 4.05 / D-074/D-075): `openRoom` sets this iff the decoded level carries a
+    /// `mirror` block, and `.room` shows `MirrorRoomView` instead of `RoomView` while
+    /// it is non-nil. `nil` for every normal room, so the single-body path — screen,
+    /// board, and engine — is exactly as before.
+    @State private var mirrorRoomState: MirrorGameState? = nil
+
     /// The resolved palette, derived from the persisted Invert preference (Phase 2.06).
     private var theme: Theme { Theme.make(settings.invertEnabled ? .invert : .light) }
 
@@ -69,12 +76,25 @@ struct ContentView: View {
                                 onPick: { openRoom($0) })
                     .transition(.opacity)
             case .room(let id):
-                RoomView(state: roomState, roomID: id,
-                         settings: settings, audio: audio, haptics: haptics, guidance: guidance,
-                         onLevelSelect: { go(.levelSelect) },
-                         onAdvance: { openRoom($0) })
-                    .id(id)   // fresh identity per room → the win overlay never leaks across rooms
-                    .transition(.opacity)
+                // A mirror room (the level carried a `mirror` block) runs the separate
+                // two-body screen + engine (Phase 4.05); every normal room takes the
+                // exact path it always has.
+                if let mirrorRoomState {
+                    MirrorRoomView(state: mirrorRoomState, roomID: id,
+                                   settings: settings, audio: audio, haptics: haptics,
+                                   guidance: guidance,
+                                   onLevelSelect: { go(.levelSelect) },
+                                   onAdvance: { openRoom($0) })
+                        .id(id)   // fresh identity per room → the win overlay never leaks across rooms
+                        .transition(.opacity)
+                } else {
+                    RoomView(state: roomState, roomID: id,
+                             settings: settings, audio: audio, haptics: haptics, guidance: guidance,
+                             onLevelSelect: { go(.levelSelect) },
+                             onAdvance: { openRoom($0) })
+                        .id(id)   // fresh identity per room → the win overlay never leaks across rooms
+                        .transition(.opacity)
+                }
             case .echoRun:
                 EchoRunView(settings: settings, audio: audio, haptics: haptics,
                             onMainMenu: { go(.mainMenu) })
@@ -111,10 +131,18 @@ struct ContentView: View {
     /// Open a campaign room: build its board fresh (a bare-board fallback if the level
     /// resource is missing or unreadable, so the app never crashes on a broken level),
     /// then route to it. Used by the Level-Select tap and the win overlay's "Next room".
+    /// A level carrying a `mirror` block builds the two-body engine instead (Phase
+    /// 4.05); a normal level clears it, so the single-body path is exactly as before.
     private func openRoom(_ id: String) {
         if let level = LevelLoader.load(id) {
-            roomState = GameState(level: level)
+            if level.mirror != nil {
+                mirrorRoomState = MirrorGameState(level: level)
+            } else {
+                mirrorRoomState = nil
+                roomState = GameState(level: level)
+            }
         } else {
+            mirrorRoomState = nil
             roomState = GameState()
         }
         route = .room(id)

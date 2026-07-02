@@ -215,6 +215,12 @@ nonisolated enum BoardMetrics {
     static let exitDefaultRing: Double = 0.55  // ink ring opacity when not the active goal
     static let padGlyph: Double = 0.50         // teleport-pad bracket opacity (ink; monochrome, not accent)
 
+    // Mirror divide (Phase 4.05 / D-074 — first-pass, Design-refinable). The visible
+    // vertical centerline of a mirror room: a quiet ink rule, clearly structural
+    // (like the hairlines, louder) and never the accent.
+    static let divideWidth: CGFloat = 2        // centerline rule thickness
+    static let divideOpacity: Double = 0.30    // centerline rule opacity (ink; monochrome)
+
     // Echo-trail aid (Phase 2.06; handover §8/§1b). The optional dotted upcoming-path
     // preview. Same `echo.base` token + opacity in both palettes (handover §8).
     static let trailDotSize: CGFloat = 3       // dot diameter

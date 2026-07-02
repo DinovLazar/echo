@@ -682,6 +682,203 @@ final class RoomSolvabilityTests: XCTestCase {
         XCTAssertEqual(state.turn, 0)
     }
 
+    // MARK: - Mirror rooms (Part 4 · Phase 4.06 — rooms 31–35, D-077)
+
+    /// Replay one mirror-room input stream through the real `MirrorGameState`. An
+    /// input is a `Direction` (`.stay` = the wait). Asserts every input commits (a
+    /// both-blocked no-op is a failure) and no mid-run death (a death rewinds the
+    /// shared turn to 0, so the turn must advance by exactly one per input). A
+    /// deliberately-blocked single body (the desync) still commits, so it passes.
+    private func replayMirrorRun(_ state: MirrorGameState, _ inputs: [Direction],
+                                 _ label: String, file: StaticString = #filePath, line: UInt = #line) {
+        for (i, input) in inputs.enumerated() {
+            let turnBefore = state.turn
+            if input == .stay {
+                XCTAssertTrue(state.wait(), "\(label) step \(i): wait() was refused", file: file, line: line)
+            } else {
+                XCTAssertTrue(state.move(input),
+                              "\(label) step \(i): move(\(input.rawValue)) was a no-op (both bodies blocked)",
+                              file: file, line: line)
+            }
+            XCTAssertEqual(state.turn, turnBefore + 1,
+                           "\(label) step \(i): a collision restarted the run (turn \(state.turn))",
+                           file: file, line: line)
+        }
+    }
+
+    /// Replay a mirror room's reference solution and assert a clean win within
+    /// budget. `runs` is a list of input streams (`.stay` = wait); the last run is
+    /// the live finish, each earlier run is folded into one mirror echo. Asserts the
+    /// decoded room matches the structural spec (including the additive `mirror`
+    /// block and the even width — D-076), every input commits with no mid-run death,
+    /// each fold banks exactly one two-body echo, and BOTH bodies finish on their
+    /// own-half exits with `hasWon` (D-074).
+    @discardableResult
+    private func assertSolvesMirror(
+        _ id: String, budget: Int,
+        startLeft: GridCoordinate, startRight: GridCoordinate,
+        exitLeft: GridCoordinate, exitRight: GridCoordinate,
+        walls: Int, switches: Int, doors: Int, hazards: Int,
+        runs: [[Direction]]
+    ) -> MirrorGameState {
+        let level = loadRoom(id)
+        XCTAssertEqual(level.id, id, "\(id): id")
+        XCTAssertNotNil(level.mirror, "\(id): a mirror room needs the mirror block")
+        XCTAssertEqual(level.mirror?.axis, "vertical", "\(id): axis")
+        XCTAssertEqual(level.width % 2, 0, "\(id): a mirror room's width must be even")
+        XCTAssertEqual(level.start, startLeft, "\(id): left start")
+        XCTAssertEqual(level.mirror?.startRight, startRight, "\(id): right start")
+        XCTAssertEqual(level.exit, exitLeft, "\(id): left exit")
+        XCTAssertEqual(level.mirror?.exitRight, exitRight, "\(id): right exit")
+        XCTAssertEqual(level.echoBudget, budget, "\(id): echoBudget")
+        XCTAssertEqual(level.walls.count, walls, "\(id): wall count")
+        XCTAssertEqual(level.switches.count, switches, "\(id): switch count")
+        XCTAssertEqual(level.doors.count, doors, "\(id): door count")
+        XCTAssertEqual(level.hazards.count, hazards, "\(id): hazard count")
+        XCTAssertEqual(level.portals.count, 0, "\(id): no teleport in the mirror band (D-074)")
+
+        let state = MirrorGameState(level: level)
+        var foldsUsed = 0
+        for (i, run) in runs.enumerated() {
+            let isFinal = (i == runs.count - 1)
+            XCTAssertEqual(state.leftBody, startLeft, "\(id) run \(i): left body not on start at turn 0")
+            XCTAssertEqual(state.rightBody, startRight, "\(id) run \(i): right body not on start at turn 0")
+            replayMirrorRun(state, run, "\(id) run \(i)")
+            if !isFinal {
+                let before = state.echoes.count
+                XCTAssertTrue(state.fold(), "\(id) run \(i): fold() was refused")
+                XCTAssertEqual(state.echoes.count, before + 1,
+                               "\(id) run \(i): fold did not bank exactly one mirror echo")
+                foldsUsed += 1
+            }
+        }
+        XCTAssertTrue(state.hasWon, "\(id): the final run did not land both bodies home")
+        XCTAssertEqual(state.leftBody, exitLeft, "\(id): left body not on its exit at the win")
+        XCTAssertEqual(state.rightBody, exitRight, "\(id): right body not on its exit at the win")
+        XCTAssertLessThanOrEqual(foldsUsed, budget, "\(id): used \(foldsUsed) folds, over budget \(budget)")
+        return state
+    }
+
+    // MARK: - Room 31 — "Symmetry" (budget 1, the two bodies clean)
+
+    /// Symmetric halves: the two bodies move in perfect lockstep, and ONE folded
+    /// mirror echo rests on both switches at once — the band's opening "aha" (D-077).
+    func testRoom31Symmetry() {
+        assertSolvesMirror("room-31", budget: 1,
+                           startLeft: g(2, 1), startRight: g(2, 6),
+                           exitLeft: g(0, 1), exitRight: g(0, 6),
+                           walls: 6, switches: 2, doors: 2, hazards: 0,
+                           runs: [
+                              [.down],                    // echo: both bodies onto their switches
+                              [.stay, .up, .up],          // live: wait for the hold, cross, both home
+                           ])
+    }
+
+    // MARK: - Room 32 — "Break Symmetry" (budget 1, desync)
+
+    /// The exits are NOT mirror-aligned, and reflected controls preserve the bodies'
+    /// column-sum — so the room is unsolvable in lockstep. The one-sided wall at
+    /// (2,2) blocks only the left body, knocking the pair out of step (D-074/D-077).
+    func testRoom32BreakSymmetry() {
+        assertSolvesMirror("room-32", budget: 1,
+                           startLeft: g(2, 1), startRight: g(2, 6),
+                           exitLeft: g(0, 1), exitRight: g(0, 5),
+                           walls: 7, switches: 1, doors: 2, hazards: 0,
+                           runs: [
+                              [.down],                    // echo: the left body holds sA
+                              [.right, .up, .up],         // live: desync at the wall, then both up
+                           ])
+    }
+
+    // MARK: - Room 33 — "Cross-Half Hold" (budget 2, AND-doors across the divide)
+
+    /// Two asymmetric switches (one per half, NOT mirror-aligned) hold BOTH doors as
+    /// a cross-half AND — every block in the room is mirror-symmetric, so no single
+    /// echo can rest on both, and a live body holding one can never also be home:
+    /// two folds, one per switch (D-077).
+    func testRoom33CrossHalfHold() {
+        assertSolvesMirror("room-33", budget: 2,
+                           startLeft: g(2, 1), startRight: g(2, 6),
+                           exitLeft: g(0, 1), exitRight: g(0, 6),
+                           walls: 6, switches: 2, doors: 2, hazards: 0,
+                           runs: [
+                              [.left],                    // echo 1: the right body holds sB (2,7)
+                              [.down, .left],             // echo 2: the left body holds sA (3,0)
+                              [.stay, .stay, .up, .up],   // live: wait for both holds, cross, home
+                           ])
+    }
+
+    // MARK: - Room 34 — "Mirror & Patrol" (budget 2, two enemies)
+
+    /// Two out-of-phase patrols sweep row 3, one per half — the echo RECORDINGS are
+    /// what must be timed (steering two bodies through the sweeps at once); the
+    /// final run then waits out the holds and crosses (D-036/D-077).
+    func testRoom34MirrorAndPatrol() {
+        assertSolvesMirror("room-34", budget: 2,
+                           startLeft: g(2, 1), startRight: g(2, 6),
+                           exitLeft: g(0, 1), exitRight: g(0, 6),
+                           walls: 6, switches: 2, doors: 2, hazards: 2,
+                           runs: [
+                              [.left, .down, .down],              // echo 1: to sL, timed past h2
+                              [.right, .stay, .down, .down],      // echo 2: to sR — the wait dodges h2
+                              [.stay, .stay, .stay, .stay, .up, .up],  // live: wait out, cross, home
+                           ])
+    }
+
+    /// Negative (D-034): echo 2's recording WITHOUT its wait steps the left body
+    /// onto (3,2) at turn 2 — exactly where patrol h2 sweeps — and dies mid-recording.
+    func testRoom34MistimedRecordingHitsPatrol() {
+        let state = MirrorGameState(level: loadRoom("room-34"))
+        replayMirrorRun(state, [.left, .down, .down], "room-34 echo 1")
+        XCTAssertTrue(state.fold())
+        XCTAssertTrue(state.move(.right))                // turn 1: fine
+        state.move(.down)                                // turn 2: left body onto (3,2) = h2 → death
+        XCTAssertFalse(state.hasWon, "the mistimed recording should die to patrol h2")
+        XCTAssertEqual(state.leftBody, state.startLeft)
+        XCTAssertEqual(state.rightBody, state.startRight)
+        XCTAssertEqual(state.turn, 0)
+        XCTAssertEqual(state.echoes.count, 1, "the banked echo persists")
+    }
+
+    // MARK: - Room 35 — "Reflection" (budget 3, two enemies — the CAMPAIGN FINALE)
+
+    /// The deep end (D-065/D-077): three switches — sA behind the period-2 patrol
+    /// h2 (the recording is timed), sB deep in the right half, sC reachable only by
+    /// DESYNC (its mirror cell (4,5) is a wall, so the approach knocks the bodies
+    /// out of step) — all three holding both exit doors as a cross-half AND; patrol
+    /// h1 owns the dash's first window, so the finish is timed too.
+    func testRoom35Reflection() {
+        assertSolvesMirror("room-35", budget: 3,
+                           startLeft: g(3, 2), startRight: g(3, 7),
+                           exitLeft: g(0, 2), exitRight: g(0, 7),
+                           walls: 9, switches: 3, doors: 2, hazards: 2,
+                           runs: [
+                              [.left, .left, .down, .down],       // echo 1: to sA, timed past h2
+                              [.down, .left, .down],              // echo 2: to sB
+                              [.right, .right, .down],            // echo 3: desync at (4,5) wall → sC
+                              [.stay, .stay, .stay, .stay, .up, .up, .up],  // live: dash at turn 5
+                           ])
+    }
+
+    /// Negative (D-034): dashing ONE BEAT EARLY (up at turn 4) meets patrol h1
+    /// arriving on (2,7) — the right body lands exactly under it, and both dissolve.
+    func testRoom35EarlyDashHitsPatrol() {
+        let state = MirrorGameState(level: loadRoom("room-35"))
+        replayMirrorRun(state, [.left, .left, .down, .down], "room-35 echo 1")
+        XCTAssertTrue(state.fold())
+        replayMirrorRun(state, [.down, .left, .down], "room-35 echo 2")
+        XCTAssertTrue(state.fold())
+        replayMirrorRun(state, [.right, .right, .down], "room-35 echo 3")
+        XCTAssertTrue(state.fold())
+        for _ in 0..<3 { XCTAssertTrue(state.wait()) }   // waits t1–t3
+        state.move(.up)                                  // turn 4: right body → (2,7) = h1 → death
+        XCTAssertFalse(state.hasWon, "the early dash should die to patrol h1 on (2,7)")
+        XCTAssertEqual(state.leftBody, state.startLeft)
+        XCTAssertEqual(state.rightBody, state.startRight)
+        XCTAssertEqual(state.turn, 0)
+        XCTAssertEqual(state.echoes.count, 3, "all three banked echoes persist")
+    }
+
     // MARK: - Hazard traces (one period, vs the documented patrol)
 
     /// Each hazard's computed one-period trace matches the trace documented for its
@@ -720,5 +917,10 @@ final class RoomSolvabilityTests: XCTestCase {
         traceAt("room-28", 0, [g(0, 5), g(1, 5), g(2, 5), g(3, 5), g(4, 5), g(3, 5), g(2, 5), g(1, 5)])
         traceAt("room-30", 0, [g(2, 3), g(3, 3), g(4, 3), g(5, 3), g(4, 3), g(3, 3)])
         traceAt("room-30", 1, [g(5, 5), g(4, 5), g(3, 5), g(2, 5), g(3, 5), g(4, 5)])
+        // Part 4 mirror band patrols (rooms 34 & 35).
+        traceAt("room-34", 0, [g(3, 4), g(3, 5), g(3, 6), g(3, 7), g(3, 6), g(3, 5)])
+        traceAt("room-34", 1, [g(3, 0), g(3, 1), g(3, 2), g(3, 3), g(3, 2), g(3, 1)])
+        traceAt("room-35", 0, [g(2, 9), g(2, 8), g(2, 7), g(2, 6), g(2, 7), g(2, 8)])
+        traceAt("room-35", 1, [g(4, 0), g(4, 1)])
     }
 }

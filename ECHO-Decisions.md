@@ -589,6 +589,38 @@
 - **Consequences:** A clean ramp for the portal and a milestone capstone that previews room 36. Exact layouts and verified solutions are Code's to author (Chat sets the arc; Code authors + verifies, adjusting minimally per the D-038/D-039 precedent). The catalog grows to 30; room 30 is the band capstone, not the campaign finale (room 35 — D-065).
 - **Links:** D-070; D-066 (the wait it composes with); D-033 / D-034 / D-035 / D-036; D-038 / D-039; D-065.
 
+### D-074 · 2026-06-29 · Mirror mechanic — a vertical split, two bodies on reflected controls, partial movement
+- **Status:** Accepted
+- **Context:** Part 4's third band needs a "you exist in both places at once" mechanic — the most on-theme idea in the game (past selves in two places) and the owner's explicit ask.
+- **Decision:** A mirror room splits down a vertical centerline into two halves; present-you is two bodies, one per half, starting mirrored. Reflected controls: up/down move both the same; left/right move them oppositely. Partial movement: each body moves iff its target is in-half / on-board / not a wall / not a closed door, else it stays while the other moves (both blocked ⇒ no-op) — using asymmetric walls to desync the bodies is how rooms are solved. Death if either body lands on or crosses an echo-body or hazard in its own half (both dissolve, restart). Switches hold across halves and an AND-door can span halves, so one folded mirror echo can hold left and right at once. Win when both bodies are on their own-half exits on the same turn. The wait is reused (both bodies hold); teleport is not in this band (mirror × teleport is room 36).
+- **Alternatives considered:** Parallel (non-reflected) controls — rejected: the bodies stay identical copies, none of the mirror bite. All-or-nothing movement (if either body is blocked, neither moves) — rejected: the halves stay perfectly mirrored forever, so the right half is always just the left's reflection and there is really one puzzle — shallow. Single-exit win (one body reaches one exit) — rejected: it doesn't use the second self, so it isn't a mirror puzzle.
+- **Consequences:** The most original mechanic in the game, and the deepest — asymmetry between halves is the entire puzzle space. Honest downside: it is the heaviest change in the project (the player is no longer one cell), which forces a separate engine (D-075) and the biggest UI work; and it is the most novel to feel, so it most needs device validation before room 36.
+- **Links:** D-058 (the separate-engine precedent); D-075; D-076; D-077; D-066 (the reused wait); D-065 (Part 4); room 36's spec in D-065.
+
+### D-075 · 2026-06-29 · Mirror engine — a separate `MirrorGameState`, reusing `Echo` per half, with a two-stream verbatim recording
+- **Status:** Accepted
+- **Context:** Mirror makes "the player" two cells, which the single-body `GameState` cannot represent without invasive, risky change to a verified engine.
+- **Decision:** Build a separate, additive `MirrorGameState` (the D-058 precedent — Echo Run's separate engine left the campaign engine untouched) that reuses the pure types and the `Echo` value type (a mirror echo is a pair of `Echo`s, one per half) and does not modify `GameState`. The recorded run is two turn-aligned `[Direction]` streams (one per body); a body blocked on a turn records `.stay`, so each half's echo replays its stream verbatim (D-020) and never re-checks doors at replay. The verified campaign engine and its single-body `BoardView` path are left intact; with no mirror rooms, nothing existing changes.
+- **Alternatives considered:** Branch inside `GameState` (make `player` sometimes a pair) — rejected: entangles mirror branches with the verified single-body logic, risking rooms 01–30. Generalize to N bodies — rejected: a large refactor of a verified engine for no behavioural gain. A single richer run stream / echoes re-checking doors at replay — rejected: breaks the pure, verbatim replay model (D-014/D-020) and can make an echo's movement depend on other echoes (non-deterministic).
+- **Consequences:** Maximal protection of the verified core; the mechanic stays pure and deterministic; `Echo` is reused, not duplicated. Honest downside: the shared room UI must support two engine types (a `RoomEngine` protocol or a mirror render path), which is the bulk of this phase's work; and some rendering may be deliberately duplicated to keep the single-body `BoardView` untouched.
+- **Links:** D-058; D-014; D-020; D-074; D-076.
+
+### D-076 · 2026-06-29 · Level format — an additive optional `mirror` block (absent ⇒ a normal room)
+- **Status:** Accepted
+- **Context:** Mirror rooms need to declare two-body mode and the second body's start/exit. The format is already extended additively (v2 portals, D-072) via `decodeIfPresent`.
+- **Decision:** Add an optional `mirror` block (`axis` = "vertical"; the right body's start + exit; the left body's are the top-level `start`/`exit`), decoded `decodeIfPresent`. Presence ⇒ two-body mode; absent ⇒ a normal single-body room, so every existing room JSON (rooms 01–30) is byte-for-byte valid and unchanged. Mirror rooms require an even width (debug-asserted). Walls/switches/doors/hazards are authored across the full grid as normal; the two halves can be asymmetric (that asymmetry is the puzzle).
+- **Alternatives considered:** Force symmetric halves / auto-mirror the left half onto the right (rejected — kills the mechanic, which lives in asymmetry). A separate mirror-room file format (rejected — splits one room across concepts for no gain).
+- **Consequences:** One small, backward-compatible block; the loader and all 30 existing rooms are unaffected. Honest downside: the format is now "v2 + the `mirror` extension" — recorded as such so the version story stays honest; and authoring a mirror room means reasoning about two halves at once.
+- **Links:** D-024 / D-072 (the format it extends); D-074; D-075; D-019 (held/blocked rules reused).
+
+### D-077 · 2026-06-29 · Rooms 31–35 — the mirror lesson arc (room 35 is the campaign finale)
+- **Status:** Accepted
+- **Context:** Part 4's third content band introduces the two bodies and must build to the campaign finale (D-065 set room 35 as the ending).
+- **Decision:** Five escalating rooms: 31 "Symmetry" (symmetric halves, one mirror echo holds both switches, reach both exits; budget 1); 32 "Break Symmetry" (asymmetric walls force desync; budget 1–2); 33 "Cross-Half Hold" (switches/AND-doors across the divide; budget 2); 34 "Mirror & Patrol" (patrols per half while steering two bodies; budget 2–3; enemies enter); 35 "Reflection" (oversized capstone + campaign finale — asymmetric halves, cross-half AND-doors, desync, two enemies, tight budget). Each ships a mirror solvability test; rooms 34 & 35 ship negatives.
+- **Alternatives considered:** Front-load asymmetry/desync (rejected — the band should ramp from lockstep). Make the finale a mirror × teleport room (rejected — that is the bonus room 36; the campaign proper ends at 35, and teleport is a separate band).
+- **Consequences:** A clean ramp for the two-body mechanic and a finale that culminates relay + mirror. Exact layouts and verified solutions are Code's to author (Chat sets the arc; Code authors + verifies, adjusting minimally per D-038/D-039). The catalog grows to 35; room 35 is the campaign finale; room 36 is a later bonus.
+- **Links:** D-074; D-066 (the reused wait); D-033/D-034/D-035/D-036; D-038/D-039; D-065.
+
 ---
 
 ### Decision-log conventions
